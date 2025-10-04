@@ -1,0 +1,10 @@
+name = "RangeSetBlaze"
+version = "0.1.0"
+defaultTargets = ["rangesetblaze"]
+
+[[lean_lib]]
+name = "RangeSetBlaze"
+
+[[lean_exe]]
+name = "rangesetblaze"
+root = "Main"
