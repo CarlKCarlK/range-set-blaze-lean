@@ -2,91 +2,86 @@ import RangeSetBlaze.Basic
 
 open IntRange
 
--- Example 1: Create a couple of non-empty ranges and one empty range
-def range1 : IntRange where
-  lo := 1
-  hi := 5
+-- Example ranges as specified
+def r1 : IntRange := ⟨101, 102⟩
+def r2 : IntRange := ⟨400, 402⟩
+def r3 : IntRange := ⟨404, 405⟩
+def e : IntRange := ⟨10, 5⟩  -- empty range
 
-def range2 : IntRange where
-  lo := 10
-  hi := 15
+-- Proof that e is empty
+example : e.empty := by decide
 
-def emptyRange : IntRange where  -- hi < lo, so this is empty
-  lo := 10
-  hi := 5
+-- Proof that e.toSet is the empty set
+example : e.toSet = (∅ : Set Int) := by
+  have : e.hi < e.lo := by decide
+  simpa [IntRange.toSet] using IntRange.toSet_eq_empty_of_hi_lt_lo this
 
--- Proof that the empty range is indeed empty
-example : emptyRange.toSet = ∅ := by
-  apply IntRange.toSet_empty_of_hi_lt_lo
+-- Alternative: simp can solve this directly
+example : e.toSet = (∅ : Set Int) := by
+  simp [IntRange.toSet, e]
+
+-- Proof that r1 precedes r2
+example : r1 ≺ r2 := by
+  unfold IntRange.before r1 r2
   decide
 
--- Example 2: A list of ranges that is sorted and disjoint
-def goodRanges : List IntRange := [
-  { lo := 1, hi := 3 },
-  { lo := 5, hi := 7 },
-  { lo := 10, hi := 12 }
-]
-
--- Proof that range1 and range2 are disjoint
-example : disjoint range1 range2 := by
-  unfold disjoint range1 range2
+-- Proof that r2 precedes r3
+example : r2 ≺ r3 := by
+  unfold IntRange.before r2 r3
   decide
 
--- Example showing that adjacent ranges are NOT disjoint
-def adjacentRange1 : IntRange where
-  lo := 1
-  hi := 5
+-- Construct a valid RangeList with r1, r2, r3
+def validRangeList : RangeList where
+  ranges := [r1, r2, r3]
+  all_nonempty := by
+    intro r hr
+    cases hr with
+    | head => unfold IntRange.nonempty r1; decide
+    | tail _ hr' =>
+      cases hr' with
+      | head => unfold IntRange.nonempty r2; decide
+      | tail _ hr'' =>
+        cases hr'' with
+        | head => unfold IntRange.nonempty r3; decide
+        | tail _ hr''' => cases hr'''
+  pairwise_gaps := by
+    simp [r1, r2, r3, IntRange.before]
 
-def adjacentRange2 : IntRange where
-  lo := 6
-  hi := 10  -- No gap, so not disjoint
+-- Example of ranges that are NOT properly separated (touching, no gap)
+def touchingRange1 : IntRange := ⟨1, 5⟩
+def touchingRange2 : IntRange := ⟨6, 10⟩  -- touches but doesn't precede
 
--- Proof that adjacent ranges (touching) are not disjoint
-example : ¬(disjoint adjacentRange1 adjacentRange2) := by
-  unfold disjoint adjacentRange1 adjacentRange2
+-- This would fail the chain requirement because touchingRange1 does NOT precede touchingRange2
+example : ¬(touchingRange1 ≺ touchingRange2) := by
+  unfold IntRange.before touchingRange1 touchingRange2
   decide
 
--- Example of overlapping ranges (also not disjoint)
-def overlappingRange1 : IntRange where
-  lo := 1
-  hi := 8
+-- Example of overlapping ranges
+def overlapping1 : IntRange := ⟨1, 8⟩
+def overlapping2 : IntRange := ⟨5, 12⟩
 
-def overlappingRange2 : IntRange where
-  lo := 5
-  hi := 12
-
-example : ¬(disjoint overlappingRange1 overlappingRange2) := by
-  unfold disjoint overlappingRange1 overlappingRange2
+example : ¬(overlapping1 ≺ overlapping2) := by
+  unfold IntRange.before overlapping1 overlapping2
   decide
-
--- A list that is NOT sorted and disjoint (ranges overlap)
-def badRanges : List IntRange := [
-  { lo := 1, hi := 5 },
-  { lo := 4, hi := 8 }
-]  -- These overlap
 
 def main : IO Unit := do
-  IO.println "RangeSetBlaze - Lean 4 Port Examples"
-  IO.println "====================================="
+  IO.println "RangeList - Idiomatic Lean 4 with Mathlib"
+  IO.println "=========================================="
   IO.println ""
-  IO.println s!"Non-empty range 1: {repr range1}"
-  IO.println s!"Non-empty range 2: {repr range2}"
-  IO.println s!"Empty range (hi < lo): {repr emptyRange}"
+  IO.println s!"r1 (nonempty): {repr r1}"
+  IO.println s!"r2 (nonempty): {repr r2}"
+  IO.println s!"r3 (nonempty): {repr r3}"
+  IO.println s!"e (empty): {repr e}"
   IO.println ""
-  IO.println s!"Range1 is empty: {range1.isEmpty}"
-  IO.println s!"Range2 is empty: {range2.isEmpty}"
-  IO.println s!"EmptyRange is empty: {emptyRange.isEmpty}"
+  IO.println s!"r1 ≺ r2: {decide (r1 ≺ r2)}"
+  IO.println s!"r2 ≺ r3: {decide (r2 ≺ r3)}"
   IO.println ""
-  IO.println s!"Range1 disjoint from Range2: {decide (disjoint range1 range2)}"
-  IO.println s!"Adjacent ranges are disjoint: {decide (disjoint adjacentRange1 adjacentRange2)}"
-  IO.println s!"Overlapping ranges are disjoint: {decide (disjoint overlappingRange1 overlappingRange2)}"
+  IO.println s!"Valid RangeList: {repr validRangeList.ranges}"
   IO.println ""
-  IO.println s!"Good ranges (sorted & disjoint): {repr goodRanges}"
-  IO.println s!"All non-empty: {RangeSetBlaze.checkNonEmpty goodRanges}"
-  IO.println s!"Sorted and disjoint: {RangeSetBlaze.checkSortedDisjoint goodRanges}"
+  IO.println s!"Touching ranges (no gap): {repr touchingRange1} and {repr touchingRange2}"
+  IO.println s!"touchingRange1 ≺ touchingRange2: {decide (touchingRange1 ≺ touchingRange2)}"
   IO.println ""
-  IO.println s!"Bad ranges (overlapping): {repr badRanges}"
-  IO.println s!"All non-empty: {RangeSetBlaze.checkNonEmpty badRanges}"
-  IO.println s!"Sorted and disjoint: {RangeSetBlaze.checkSortedDisjoint badRanges}"
+  IO.println s!"Overlapping ranges: {repr overlapping1} and {repr overlapping2}"
+  IO.println s!"overlapping1 ≺ overlapping2: {decide (overlapping1 ≺ overlapping2)}"
   IO.println ""
-  IO.println s!"Hello, {hello}!"
+  IO.println "✓ All examples demonstrate idiomatic Lean 4 with mathlib!"
