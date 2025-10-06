@@ -1,0 +1,20 @@
+*** Begin Patch
+*** Update File: RangeSetBlaze/Basic.lean
+@@
+-  ·
+-    let curr : IntRange.NR := ?r, hr?
+-    rcases insert curr s.ranges s.ok with ?ys, hpair, hset?
+-    have : (internalAddA s r).toSet = listToSet ys := by
+-      simp [internalAddA, hr, toSet_eq_listToSet]
+-    simpa [this, hset, toSet_eq_listToSet, Set.union_comm]
++  ·
++    let curr : IntRange.NR := ?r, hr?
++    rcases insert curr s.ranges s.ok with ?ys, hpair, hset?
++    have hstruct : internalAddA s r = ?ys, hpair? := by
++      simp [internalAddA, hr]
++    have hranges : (internalAddA s r).ranges = ys := by
++      simpa using congrArg RangeSetBlaze.ranges hstruct
++    have : (internalAddA s r).toSet = listToSet ys := by
++      simpa [toSet_eq_listToSet, hranges]
++    simpa [this, hset, toSet_eq_listToSet, Set.union_comm]
+*** End Patch
