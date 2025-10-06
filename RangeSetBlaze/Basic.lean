@@ -50,49 +50,53 @@ lemma toSet_nonempty_of_le {r : IntRange} (h : r.lo ≤ r.hi) :
 lemma nonempty_toSet_iff (r : IntRange) : r.toSet.Nonempty ↔ r.nonempty := by
   simp [toSet, Set.nonempty_Icc, nonempty]
 
-/-- One range comes before another with a gap if the first ends before the second starts. -/
-def before (a b : IntRange) : Prop := a.hi + 1 < b.lo
-
-scoped infixl:50 " ≺ " => IntRange.before
-
 instance : DecidablePred empty := fun r => inferInstanceAs (Decidable (r.hi < r.lo))
 instance : DecidablePred nonempty := fun r => inferInstanceAs (Decidable (r.lo ≤ r.hi))
-instance : DecidableRel before := fun a b => inferInstanceAs (Decidable (a.hi + 1 < b.lo))
 
 /-- Convenient abbreviation for nonempty ranges as a subtype. -/
 abbrev NR := { r : IntRange // r.nonempty }
+
+namespace NR
+
+/-- One nonempty range comes before another with a gap if the first ends before the second starts. -/
+def before (a b : NR) : Prop := a.val.hi + 1 < b.val.lo
+
+scoped infixl:50 " ≺ " => NR.before
+
+instance : DecidableRel before := fun a b => inferInstanceAs (Decidable (a.val.hi + 1 < b.val.lo))
+
+end NR
 
 /-- Coercion from IntRange to Set Int. -/
 instance : Coe IntRange (Set Int) where coe := toSet
 
 end IntRange
 
+open IntRange (NR)
+open scoped IntRange.NR
+
 /-- A list of nonempty ranges that are sorted and pairwise disjoint with gaps. -/
-structure RangeList where
-  ranges : List IntRange
-  all_nonempty : ∀ r ∈ ranges, r.nonempty
-  pairwise_gaps : List.Pairwise IntRange.before ranges
+structure RangeSetBlaze where
+  ranges : List NR
+  ok : List.Pairwise (· ≺ ·) ranges
+  deriving Repr
 
-namespace RangeList
+namespace RangeSetBlaze
 
-/-- Convert a RangeList to a set by taking the union of all its ranges. -/
-def toSet (L : RangeList) : Set Int :=
-  L.ranges.foldr (fun r acc => r.toSet ∪ acc) ∅
+/-- Convert a RangeSetBlaze to a set by taking the union of all its ranges. -/
+def toSet (L : RangeSetBlaze) : Set Int :=
+  L.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅
 
-/-- The toSet of an empty RangeList is empty. -/
+/-- The toSet of an empty RangeSetBlaze is empty. -/
 @[simp]
-lemma toSet_nil (all_nonempty : ∀ r ∈ ([] : List IntRange), r.nonempty)
-    (pairwise_gaps : List.Pairwise IntRange.before []) :
-  toSet ⟨[], all_nonempty, pairwise_gaps⟩ = ∅ := rfl
+lemma toSet_nil (ok : List.Pairwise NR.before []) :
+  toSet ⟨[], ok⟩ = ∅ := rfl
 
 /-- The toSet of a cons is the union of the head's toSet and the tail's toSet. -/
 @[simp]
-lemma toSet_cons {r : IntRange} {rs : List IntRange}
-    {all_nonempty : ∀ r' ∈ r :: rs, r'.nonempty}
-    {pairwise_gaps : List.Pairwise IntRange.before (r :: rs)} :
-  toSet ⟨r :: rs, all_nonempty, pairwise_gaps⟩ =
-    r.toSet ∪ toSet ⟨rs,
-      (fun r' hr' => all_nonempty r' (List.mem_cons_of_mem _ hr')),
-      pairwise_gaps.tail⟩ := rfl
+lemma toSet_cons {r : NR} {rs : List NR}
+    {ok : List.Pairwise NR.before (r :: rs)} :
+  toSet ⟨r :: rs, ok⟩ =
+    r.val.toSet ∪ toSet ⟨rs, ok.tail⟩ := rfl
 
-end RangeList
+end RangeSetBlaze
