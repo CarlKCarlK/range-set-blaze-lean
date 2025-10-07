@@ -1,6 +1,7 @@
 import Mathlib.Data.Int.Interval
 import Mathlib.Data.List.Pairwise
 import Mathlib.Data.Set.Lattice
+import Mathlib.Tactic.Linarith
 
 /-- An inclusive range of integers with fields `lo` and `hi`. -/
 structure IntRange where
@@ -360,6 +361,66 @@ private def insert
               have hzg : z ≺ glued := before_glue_of_before hzc hzx
               exact hmon hz_tail hzg y hy
           ⟨ys, hpair, setEq, mono⟩
+
+open Classical
+
+/-- The output list of `insert curr xs ok`. -/
+ def insertYs (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs) : List IntRange.NR :=
+  (insert curr xs ok).1
+
+/-- Pairwise invariant re-established by `insert`. -/
+private lemma insert_pairwise_aux
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs) :
+    List.Pairwise (· ≺ ·) (insert curr xs ok).1 := by
+  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
+  simpa using hpair
+
+/-- Pairwise invariant re-established by `insert`. -/
+lemma insert_pairwise
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs) :
+    List.Pairwise (· ≺ ·) (insertYs curr xs ok) := by
+  simpa [insertYs] using insert_pairwise_aux curr xs ok
+
+private lemma insert_sets_aux
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs) :
+    listToSet (insert curr xs ok).1 =
+      curr.val.toSet ∪ listToSet xs := by
+  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
+  simpa using hset
+
+/-- Set equality spec for `insert`. -/
+lemma insert_sets
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs) :
+    listToSet (insertYs curr xs ok) =
+      curr.val.toSet ∪ listToSet xs := by
+  simpa [insertYs] using insert_sets_aux curr xs ok
+
+private lemma insert_monotone_aux
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs)
+    {z : IntRange.NR}
+    (hz_tail : ∀ y ∈ xs, z ≺ y)
+    (hzc : z ≺ curr) :
+    ∀ y ∈ (insert curr xs ok).1, z ≺ y := by
+  rcases insert curr xs ok with ⟨ys, hpair, hset, hmon⟩
+  simpa using hmon hz_tail hzc
+
+/-- Monotonicity witness exposed as a lemma:
+if `z` was before every element of the old tail and before `curr`,
+then `z` is before every element of the new list. -/
+lemma insert_monotone
+    (curr : IntRange.NR) (xs : List IntRange.NR)
+    (ok : List.Pairwise (· ≺ ·) xs)
+    {z : IntRange.NR}
+    (hz_tail : ∀ y ∈ xs, z ≺ y)
+    (hzc : z ≺ curr) :
+    ∀ y ∈ insertYs curr xs ok, z ≺ y := by
+  simpa [insertYs] using insert_monotone_aux curr xs ok hz_tail hzc
 
 /-- Add a (possibly empty) range to a `RangeSetBlaze`. -/
 def internalAddA (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
