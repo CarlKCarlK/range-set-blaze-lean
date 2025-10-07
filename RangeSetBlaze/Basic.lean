@@ -106,7 +106,8 @@ lemma mergeRange_toSet_of_overlap
               (b := ⟨b.val, b.property⟩)).1 h₁
             simpa using this
           have hx_lt' : x < a.hi + 1 := lt_of_lt_of_le hx_lt hb_le
-          have hx_le_a : x ≤ a.hi := (Int.lt_add_one_iff).1 hx_lt'
+          have hx_le_a : x ≤ a.hi := by
+            linarith
           exact Or.inl ⟨h_ax, hx_le_a⟩
     | inr h_bx =>
       cases h_hi' with
@@ -120,7 +121,8 @@ lemma mergeRange_toSet_of_overlap
               (b := ⟨a, ha⟩)).1 h₂
             simpa using this
           have hx_lt' : x < b.val.hi + 1 := lt_of_lt_of_le hx_lt ha_le
-          have hx_le_b : x ≤ b.val.hi := (Int.lt_add_one_iff).1 hx_lt'
+          have hx_le_b : x ≤ b.val.hi := by
+            linarith
           exact Or.inr ⟨h_bx, hx_le_b⟩
       | inr h_xb =>
         exact Or.inr ⟨h_bx, h_xb⟩
@@ -243,28 +245,35 @@ private def listToSet (rs : List NR) : Set Int :=
 
 /-- Proof-free insertion by scanning once with Rel3. -/
 lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
-  -- a.hi + 1 < b.lo  and  b.hi + 1 < c.lo  ⇒  a.hi + 1 < c.lo
   unfold NR.before at *
-  -- a.hi + 1 < b.lo ≤ b.hi
-  have h1 : a.val.hi + 1 ≤ b.val.hi := (lt_of_lt_of_le hab b.property).le
-  -- b.hi ≤ b.hi + 1
-  have h2 : b.val.hi ≤ b.val.hi + 1 := by
-    have : (0 : Int) ≤ 1 := by decide
-    calc
-      b.val.hi = b.val.hi + 0 := by simp
-      _ ≤ b.val.hi + 1 := add_le_add_left this _
-  -- hence b.hi < c.lo
-  have h3 : b.val.hi < c.val.lo := lt_of_le_of_lt h2 hbc
-  -- chain: a.hi + 1 ≤ b.hi < c.lo
-  exact lt_of_le_of_lt h1 h3
+  have h₁ : a.val.hi + 1 ≤ b.val.hi :=
+    (lt_of_lt_of_le hab b.property).le
+  have h₂ : b.val.hi ≤ b.val.hi + 1 := by
+    linarith
+  have h₃ : b.val.hi < c.val.lo := lt_of_le_of_lt h₂ hbc
+  exact lt_of_le_of_lt h₁ h₃
 
 lemma before_glue_of_before {z a b : NR}
     (hza : z ≺ a) (hzb : z ≺ b) :
     z ≺ IntRange.NR.glue a b := by
-  -- Need z.hi + 1 < min a.lo b.lo; both inequalities are available.
-  unfold NR.before at *
-  have hmin : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
-  simpa [IntRange.NR.glue, IntRange.mergeRange] using hmin
+  unfold NR.before IntRange.NR.glue IntRange.mergeRange at *
+  have : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
+  simpa using this
+
+lemma disjoint_of_before {a b : NR} (h : a ≺ b) :
+    a.val.toSet ∩ b.val.toSet = (∅ : Set Int) := by
+  ext x
+  constructor
+  · intro hx
+    rcases hx with ⟨hax, hbx⟩
+    rcases (IntRange.mem_toSet_iff a.val x).1 hax with ⟨hax_lo, hax_hi⟩
+    rcases (IntRange.mem_toSet_iff b.val x).1 hbx with ⟨hbx_lo, hbx_hi⟩
+    have h_lt : a.val.hi < b.val.lo := by
+      exact lt_trans (lt_add_one _) h
+    have hx_le : b.val.lo ≤ a.val.hi := le_trans hbx_lo hax_hi
+    exact (not_le_of_gt h_lt) hx_le
+  · intro hx
+    cases hx
 
 private def insert
   (curr : IntRange.NR)
