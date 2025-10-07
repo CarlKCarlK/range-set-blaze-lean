@@ -309,32 +309,33 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
   classical
   by_cases hr : r.nonempty
   ·
-    let curr : IntRange.NR := ⟨r, hr⟩
-    rcases insert curr s.ranges s.ok with ⟨ys, hpair, hset⟩
+    -- Inserted case: reduce to the list-level `insert` lemma.
+    set res := insert ⟨r, hr⟩ s.ranges s.ok with hInsert
+    rcases res with ⟨ys, hpair, hset⟩
+    have hNotEmpty : ¬ r.empty := by
+      simpa [IntRange.nonempty_iff_not_empty] using hr
     have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by
-      simp [internalAddA, hr, hpair]
+      simp [internalAddA, hr, hNotEmpty, hInsert.symm]
+    have hcurr : (⟨r, hr⟩ : IntRange.NR).val.toSet = r.toSet := rfl
     have htoSet : (internalAddA s r).toSet = listToSet ys := by
       simpa [hstruct, toSet_eq_listToSet]
-    have hcurr : curr.val.toSet = r.toSet := rfl
-    have hs : s.toSet = listToSet s.ranges := by
+    have hsToSet : s.toSet = listToSet s.ranges := by
       simp [toSet_eq_listToSet]
-    have htarget :
-        listToSet ys = r.toSet ∪ s.toSet := by
-      calc
-        listToSet ys
-            = curr.val.toSet ∪ listToSet s.ranges := hset
-        _ = r.toSet ∪ listToSet s.ranges := by simpa [hcurr]
-        _ = r.toSet ∪ s.toSet := by simpa [hs]
-    have hlhs : (internalAddA s r).toSet = r.toSet ∪ s.toSet := by
-      simpa [htoSet] using htarget
-    simpa [Set.union_comm] using hlhs
+    calc
+      (internalAddA s r).toSet
+          = listToSet ys := htoSet
+      _ = r.toSet ∪ listToSet s.ranges := by
+          simpa [hcurr] using hset
+      _ = s.toSet ∪ r.toSet := by
+          simpa [hsToSet, Set.union_comm]
   ·
-    have : r.toSet = (∅ : Set Int) := by
-      have hlt : r.hi < r.lo := by
-        simpa [IntRange.nonempty, not_le] using hr
+    -- Empty range case: its set is ∅, and `internalAddA` returns `s`.
+    have hlt : r.hi < r.lo := by
+      -- hr = ¬(r.lo ≤ r.hi)
+      simpa [IntRange.nonempty, not_le] using hr
+    have hEmpty : r.toSet = (∅ : Set Int) := by
       simpa using IntRange.toSet_eq_empty_of_hi_lt_lo hlt
-    have hstruct : internalAddA s r = s := by
-      simp [internalAddA, hr]
-    simpa [hstruct, this, Set.union_comm, toSet_eq_listToSet]
+    have hempty : r.empty := hlt
+    simp [internalAddA, hr, hempty, hEmpty, Set.union_comm]
 
 end RangeSetBlaze
