@@ -28,7 +28,7 @@ def baseSet : RangeSetBlaze :=
         subst hy'
         change r1.val.hi + 1 < r2.val.lo
         decide
-      · simpa using List.pairwise_singleton (r := (· ≺ ·)) (a := r2)⟩
+      · exact List.pairwise_singleton (R := (· ≺ ·)) (a := r2)⟩
 
 def addTouch   : RangeSetBlaze := internalAddA baseSet (ir 3 4)
 def addOverlap : RangeSetBlaze := internalAddA baseSet (ir 2 6)

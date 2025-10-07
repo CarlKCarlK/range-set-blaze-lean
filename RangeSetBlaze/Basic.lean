@@ -2,9 +2,6 @@ import Mathlib.Data.Int.Interval
 import Mathlib.Data.List.Pairwise
 import Mathlib.Data.Set.Lattice
 
--- Let us park a few proof obligations so we can ship the API and examples.
-set_option warn.sorry false
-
 /-- An inclusive range of integers with fields `lo` and `hi`. -/
 structure IntRange where
   lo : Int
@@ -262,7 +259,7 @@ private def insert
         listToSet ys = curr.val.toSet ∪ listToSet xs }
   | [], _ =>
       ⟨[curr], by
-          simpa using List.pairwise_singleton (r := (· ≺ ·)) (a := curr),
+          exact List.pairwise_singleton (R := (· ≺ ·)) (a := curr),
         by simp [listToSet]⟩
   | x :: xs, hpx =>
       have h_tail : List.Pairwise (· ≺ ·) xs := (List.pairwise_cons.1 hpx).2
@@ -315,10 +312,10 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
     have hNotEmpty : ¬ r.empty := by
       simpa [IntRange.nonempty_iff_not_empty] using hr
     have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by
-      simp [internalAddA, hr, hNotEmpty, hInsert.symm]
+      simp [internalAddA, hNotEmpty, hInsert.symm]
     have hcurr : (⟨r, hr⟩ : IntRange.NR).val.toSet = r.toSet := rfl
     have htoSet : (internalAddA s r).toSet = listToSet ys := by
-      simpa [hstruct, toSet_eq_listToSet]
+      simp [hstruct, toSet_eq_listToSet]
     have hsToSet : s.toSet = listToSet s.ranges := by
       simp [toSet_eq_listToSet]
     calc
@@ -327,7 +324,7 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
       _ = r.toSet ∪ listToSet s.ranges := by
           simpa [hcurr] using hset
       _ = s.toSet ∪ r.toSet := by
-          simpa [hsToSet, Set.union_comm]
+          rw [hsToSet.symm, Set.union_comm]
   ·
     -- Empty range case: its set is ∅, and `internalAddA` returns `s`.
     have hlt : r.hi < r.lo := by
@@ -336,6 +333,6 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
     have hEmpty : r.toSet = (∅ : Set Int) := by
       simpa using IntRange.toSet_eq_empty_of_hi_lt_lo hlt
     have hempty : r.empty := hlt
-    simp [internalAddA, hr, hempty, hEmpty, Set.union_comm]
+    simp [internalAddA, hempty, hEmpty, Set.union_comm]
 
 end RangeSetBlaze

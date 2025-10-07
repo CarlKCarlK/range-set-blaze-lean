@@ -1,6 +1,11 @@
 {
     "cSpell.words": [
+        "hpair",
+        "hset",
         "infixl",
-        "rangesetblaze"
+        "rangesetblaze",
+        "hstruct",
+        "hcurr",
+        "hempty",
     ]
 }
