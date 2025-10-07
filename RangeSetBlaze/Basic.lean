@@ -241,62 +241,131 @@ private def listToSet (rs : List NR) : Set Int :=
     L.toSet = listToSet L.ranges := rfl
 
 /-- Proof-free insertion by scanning once with Rel3. -/
-private def insertList (curr : IntRange.NR) : List IntRange.NR → List IntRange.NR
-  | [] => [curr]
-  | x :: xs =>
-    match IntRange.NR.Rel3.classify curr x with
-    | IntRange.NR.Rel3.left _ => curr :: x :: xs
-    | IntRange.NR.Rel3.right _ => x :: insertList curr xs
-    | IntRange.NR.Rel3.overlap _ _ =>
-        insertList (IntRange.NR.glue curr x) xs
+lemma before_trans {a b c : NR} (hab : a ≺ b) (hbc : b ≺ c) : a ≺ c := by
+  -- a.hi + 1 < b.lo  and  b.hi + 1 < c.lo  ⇒  a.hi + 1 < c.lo
+  unfold NR.before at *
+  -- a.hi + 1 < b.lo ≤ b.hi
+  have h1 : a.val.hi + 1 ≤ b.val.hi := (lt_of_lt_of_le hab b.property).le
+  -- b.hi ≤ b.hi + 1
+  have h2 : b.val.hi ≤ b.val.hi + 1 := by
+    have : (0 : Int) ≤ 1 := by decide
+    calc
+      b.val.hi = b.val.hi + 0 := by simp
+      _ ≤ b.val.hi + 1 := add_le_add_left this _
+  -- hence b.hi < c.lo
+  have h3 : b.val.hi < c.val.lo := lt_of_le_of_lt h2 hbc
+  -- chain: a.hi + 1 ≤ b.hi < c.lo
+  exact lt_of_le_of_lt h1 h3
 
-/-- Full insertion that restores pairwise `≺` and preserves sets. (Proofs parked behind `sorry`.) -/
+lemma before_glue_of_before {z a b : NR}
+    (hza : z ≺ a) (hzb : z ≺ b) :
+    z ≺ IntRange.NR.glue a b := by
+  -- Need z.hi + 1 < min a.lo b.lo; both inequalities are available.
+  unfold NR.before at *
+  have hmin : z.val.hi + 1 < min a.val.lo b.val.lo := lt_min hza hzb
+  simpa [IntRange.NR.glue, IntRange.mergeRange] using hmin
+
 private def insert
   (curr : IntRange.NR)
   : (xs : List IntRange.NR) → List.Pairwise (· ≺ ·) xs →
       { ys : List IntRange.NR //
         List.Pairwise (· ≺ ·) ys ∧
-        listToSet ys = curr.val.toSet ∪ listToSet xs }
+        listToSet ys = curr.val.toSet ∪ listToSet xs ∧
+        ∀ {z : IntRange.NR},
+          (∀ y ∈ xs, z ≺ y) → z ≺ curr →
+          ∀ y ∈ ys, z ≺ y }
   | [], _ =>
       ⟨[curr], by
           exact List.pairwise_singleton (R := (· ≺ ·)) (a := curr),
-        by simp [listToSet]⟩
+        by simp [listToSet],
+        by
+          intro z _ hzc y hy
+          have hy' : y = curr := List.mem_singleton.mp hy
+          simpa [hy'] using hzc⟩
   | x :: xs, hpx =>
+      have hx_tail : ∀ y ∈ xs, x ≺ y := (List.pairwise_cons.1 hpx).1
       have h_tail : List.Pairwise (· ≺ ·) xs := (List.pairwise_cons.1 hpx).2
       match IntRange.NR.Rel3.classify curr x with
-      | IntRange.NR.Rel3.left _ =>
-          ⟨curr :: x :: xs,
+      | IntRange.NR.Rel3.left hcx =>
+          let hcurr_tail : ∀ y ∈ xs, curr ≺ y :=
             by
-              -- TODO: establish pairwise gap ordering
-              sorry,
+              intro y hy
+              exact before_trans hcx (hx_tail y hy)
+          let pair : List.Pairwise (· ≺ ·) (curr :: x :: xs) :=
+            List.pairwise_cons.2
+              ⟨by
+                  intro y hy
+                  rcases List.mem_cons.1 hy with hy | hy
+                  · simpa [hy] using hcx
+                  · exact hcurr_tail y hy,
+                hpx⟩
+          let mono :
+              ∀ {z : IntRange.NR},
+                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
+                ∀ y ∈ curr :: x :: xs, z ≺ y :=
             by
-              simp [listToSet_cons]⟩
-      | IntRange.NR.Rel3.right _ =>
-          let ⟨ys, hpair, hset⟩ := insert curr xs h_tail
-          ⟨x :: ys,
+              intro z hzxs hzc y hy
+              rcases List.mem_cons.1 hy with hy | hy
+              · simpa [hy] using hzc
+              · exact hzxs y hy
+          ⟨curr :: x :: xs, pair, by simp [listToSet_cons], mono⟩
+      | IntRange.NR.Rel3.right hxc =>
+          let ⟨ys, hpair, hset, hmon⟩ := insert curr xs h_tail
+          let hx_all : ∀ y ∈ ys, x ≺ y :=
+            hmon
+              (by
+                intro y hy
+                exact hx_tail y hy)
+              hxc
+          let pair : List.Pairwise (· ≺ ·) (x :: ys) :=
+            List.pairwise_cons.2 ⟨hx_all, hpair⟩
+          let setEq :
+              listToSet (x :: ys) = curr.val.toSet ∪ listToSet (x :: xs) :=
             by
-              -- TODO: propagate pairwise relation after recursive insert
-              sorry,
+              have := congrArg (fun s => x.val.toSet ∪ s) hset
+              simpa [listToSet_cons, Set.union_left_comm, Set.union_assoc, Set.union_comm] using this
+          let mono :
+              ∀ {z : IntRange.NR},
+                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
+                ∀ y ∈ x :: ys, z ≺ y :=
             by
-              -- preserve set equality after prepending `x`
-              have hx := congrArg (fun s => x.val.toSet ∪ s) hset
-              simpa [listToSet_cons, Set.union_left_comm, Set.union_assoc, Set.union_comm] using hx⟩
+              intro z hzxs hzc y hy
+              rcases List.mem_cons.1 hy with hy | hy
+              · simpa [hy] using hzxs x (by simp)
+              · have hz_tail : ∀ w ∈ xs, z ≺ w := by
+                  intro w hw
+                  exact hzxs w (List.mem_cons_of_mem _ hw)
+                exact hmon hz_tail hzc y hy
+          ⟨x :: ys, pair, setEq, mono⟩
       | IntRange.NR.Rel3.overlap h₁ h₂ =>
           let glued := IntRange.NR.glue curr x
-          have gl_sets :
-              glued.val.toSet = curr.val.toSet ∪ x.val.toSet :=
+          have gl_sets : glued.val.toSet = curr.val.toSet ∪ x.val.toSet :=
             IntRange.NR.glue_sets curr x h₁ h₂
-          let ⟨ys, hpair, hset⟩ := insert glued xs h_tail
-          ⟨ys, hpair,
+          let ⟨ys, hpair, hset, hmon⟩ := insert glued xs h_tail
+          let setEq :
+              listToSet ys = curr.val.toSet ∪ listToSet (x :: xs) :=
             by
               simpa [listToSet_cons, gl_sets, Set.union_assoc,
-                Set.union_left_comm, Set.union_comm] using hset⟩
+                Set.union_left_comm, Set.union_comm] using hset
+          let mono :
+              ∀ {z : IntRange.NR},
+                (∀ y ∈ x :: xs, z ≺ y) → z ≺ curr →
+                ∀ y ∈ ys, z ≺ y :=
+            by
+              intro z hzxs hzc y hy
+              have hz_tail : ∀ w ∈ xs, z ≺ w := by
+                intro w hw
+                exact hzxs w (List.mem_cons_of_mem _ hw)
+              have hzx : z ≺ x := hzxs x (by simp)
+              have hzg : z ≺ glued := before_glue_of_before hzc hzx
+              exact hmon hz_tail hzg y hy
+          ⟨ys, hpair, setEq, mono⟩
 
 /-- Add a (possibly empty) range to a `RangeSetBlaze`. -/
 def internalAddA (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   if hr : r.nonempty then
     let curr : IntRange.NR := ⟨r, hr⟩
-    let ⟨ys, hpair, _⟩ := insert curr s.ranges s.ok
+    let ⟨ys, hpair, _, _⟩ := insert curr s.ranges s.ok
     ⟨ys, hpair⟩
   else s
 
@@ -308,7 +377,7 @@ lemma internalAddA_toSet (s : RangeSetBlaze) (r : IntRange) :
   ·
     -- Inserted case: reduce to the list-level `insert` lemma.
     set res := insert ⟨r, hr⟩ s.ranges s.ok with hInsert
-    rcases res with ⟨ys, hpair, hset⟩
+    rcases res with ⟨ys, hpair, hset, hmon⟩
     have hNotEmpty : ¬ r.empty := by
       simpa [IntRange.nonempty_iff_not_empty] using hr
     have hstruct : internalAddA s r = ⟨ys, hpair⟩ := by

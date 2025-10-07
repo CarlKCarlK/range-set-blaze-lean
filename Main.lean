@@ -78,3 +78,17 @@ example : -4 ∈ addLeft.toSet := by
       -4 ∈ (internalAddA baseSet (ir (-5) (-3))).toSet :=
     hEq.symm ▸ hUnion
   simpa [addLeft] using hGoal
+
+def demoScenarios :
+    List (String × RangeSetBlaze) :=
+  [("baseSet", baseSet),
+   ("addTouch", addTouch),
+   ("addOverlap", addOverlap),
+   ("addLeft", addLeft),
+   ("addEmpty", addEmpty)]
+
+def main : IO Unit := do
+  IO.println "RangeSetBlaze sample membership:"
+  for (label, rs) in demoScenarios do
+    let hits := samplePoints.filter (fun i => contains rs i)
+    IO.println s!"  {label}: {hits}"
