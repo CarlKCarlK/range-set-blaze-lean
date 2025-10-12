@@ -1,4 +1,4 @@
-import RangeSetBlaze.Basic
+import RangeSetBlaze.AlgoB
 
 open IntRange
 open IntRange.NR
@@ -30,10 +30,10 @@ def baseSet : RangeSetBlaze :=
         decide
       · exact List.pairwise_singleton (R := (· ≺ ·)) (a := r2)⟩
 
-def addTouch   : RangeSetBlaze := internalAddA baseSet (ir 3 4)
-def addOverlap : RangeSetBlaze := internalAddA baseSet (ir 2 6)
-def addLeft    : RangeSetBlaze := internalAddA baseSet (ir (-5) (-3))
-def addEmpty   : RangeSetBlaze := internalAddA baseSet (ir 10 5)
+def addTouch   : RangeSetBlaze := internalAddB baseSet (ir 3 4)
+def addOverlap : RangeSetBlaze := internalAddB baseSet (ir 2 6)
+def addLeft    : RangeSetBlaze := internalAddB baseSet (ir (-5) (-3))
+def addEmpty   : RangeSetBlaze := internalAddB baseSet (ir 10 5)
 
 namespace RangeSetBlaze
 
@@ -55,19 +55,19 @@ def samplePoints : List Int :=
 #eval! samplePoints.filter (fun i => contains addEmpty i)
 
 example : 4 ∈ addTouch.toSet := by
-  have hEq := RangeSetBlaze.internalAddA_toSet baseSet (ir 3 4)
+  have hEq := RangeSetBlaze.internalAddB_toSet baseSet (ir 3 4)
   have hUnion :
       4 ∈ baseSet.toSet ∪ (ir 3 4).toSet := by
     have : 4 ∈ baseSet.toSet ∨ 4 ∈ (ir 3 4).toSet :=
       Or.inr (by simp [ir, IntRange.mem_toSet_iff])
     simpa [Set.mem_union] using this
   have hGoal :
-      4 ∈ (internalAddA baseSet (ir 3 4)).toSet :=
+      4 ∈ (internalAddB baseSet (ir 3 4)).toSet :=
     hEq.symm ▸ hUnion
   simpa [addTouch] using hGoal
 
 example : -4 ∈ addLeft.toSet := by
-  have hEq := RangeSetBlaze.internalAddA_toSet baseSet (ir (-5) (-3))
+  have hEq := RangeSetBlaze.internalAddB_toSet baseSet (ir (-5) (-3))
   have hUnion :
       -4 ∈ baseSet.toSet ∪ (ir (-5) (-3)).toSet := by
     have :
@@ -75,7 +75,7 @@ example : -4 ∈ addLeft.toSet := by
       Or.inr (by simp [ir, IntRange.mem_toSet_iff])
     simpa [Set.mem_union] using this
   have hGoal :
-      -4 ∈ (internalAddA baseSet (ir (-5) (-3))).toSet :=
+      -4 ∈ (internalAddB baseSet (ir (-5) (-3))).toSet :=
     hEq.symm ▸ hUnion
   simpa [addLeft] using hGoal
 
