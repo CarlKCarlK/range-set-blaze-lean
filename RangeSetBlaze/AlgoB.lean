@@ -37,11 +37,183 @@ structure SplitWitness (curr : NR) (xs : List NR) where
   touch_ok : ∀ {t}, t ∈ touching → isTouch curr t
   after_ok : ∀ {a}, a ∈ after → isAfter curr a
 
+mutual
+  def splitBefore (curr : NR) :
+      (xs : List NR) → List.Pairwise (· ≺ ·) xs →
+      SplitWitness curr xs
+    | [], _ =>
+        { before := []
+          touching := []
+          after := []
+          order := by simp
+          before_ok := by intro _ hb; cases hb
+          touch_ok := by intro _ hb; cases hb
+          after_ok := by intro _ hb; cases hb }
+    | x :: xs, ok =>
+        let head := List.pairwise_cons.1 ok
+        let okTail := head.2
+        match NR.Rel3.classify x curr with
+        | NR.Rel3.left hx =>
+            let tail := splitBefore curr xs okTail
+            { before := x :: tail.before
+              touching := tail.touching
+              after := tail.after
+              order := by
+                have h := tail.order
+                calc
+                  x :: xs = x :: (tail.before ++ tail.touching ++ tail.after) := by
+                    simpa [h]
+                  _ = (x :: tail.before) ++ tail.touching ++ tail.after := by
+                    simp [List.cons_append]
+              before_ok := by
+                intro b hb
+                have hb' : b = x ∨ b ∈ tail.before := by
+                  simpa using hb
+                cases hb' with
+                | inl hbEq =>
+                    subst hbEq
+                    exact hx
+                | inr hbMem =>
+                    exact tail.before_ok hbMem
+              touch_ok := tail.touch_ok
+              after_ok := tail.after_ok }
+        | NR.Rel3.overlap hx₁ hx₂ =>
+            splitTouching curr x ⟨hx₁, hx₂⟩ xs ok
+        | NR.Rel3.right hx =>
+            splitAfter curr x hx xs ok
+
+  def splitTouching (curr : NR) (x : NR) (hx : isTouch curr x) :
+      (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
+      SplitWitness curr (x :: xs)
+    | [], _ =>
+        { before := []
+          touching := [x]
+          after := []
+          order := by simp
+          before_ok := by intro _ hb; cases hb
+          touch_ok := by
+            intro t ht
+            have ht' : t = x := by simpa using ht
+            simpa [ht'] using hx
+          after_ok := by intro _ hb; cases hb }
+    | y :: ys, ok =>
+        let head := List.pairwise_cons.1 ok
+        let okTail := head.2
+        have xBeforeY : x ≺ y := head.1 (by simp)
+        match NR.Rel3.classify y curr with
+        | NR.Rel3.left hy =>
+            have hFalse : False :=
+              hx.1 (before_trans xBeforeY hy)
+            by cases hFalse
+        | NR.Rel3.overlap hy₁ hy₂ =>
+            let tail := splitTouching curr y ⟨hy₁, hy₂⟩ ys okTail
+            { before := []
+              touching := x :: tail.touching
+              after := tail.after
+              order := by
+                have h : y :: ys = tail.touching ++ tail.after := by
+                  simpa [List.nil_append] using tail.order
+                calc
+                  x :: y :: ys = x :: (tail.touching ++ tail.after) := by
+                    simpa [h]
+                  _ = (x :: tail.touching) ++ tail.after := by
+                    simp [List.cons_append]
+              before_ok := by intro _ hb; cases hb
+              touch_ok := by
+                intro t ht
+                have ht' : t = x ∨ t ∈ tail.touching := by
+                  simpa using ht
+                cases ht' with
+                | inl htEq =>
+                    subst htEq
+                    simpa using hx
+                | inr htMem =>
+                    exact tail.touch_ok htMem
+              after_ok := tail.after_ok }
+        | NR.Rel3.right hy =>
+            let tail := splitAfter curr y hy ys okTail
+            { before := []
+              touching := [x]
+              after := tail.after
+              order := by
+                have h : y :: ys = tail.after := by
+                  simpa [List.nil_append] using tail.order
+                simp [List.cons_append, h]
+              before_ok := by intro _ hb; cases hb
+              touch_ok := by
+                intro t ht
+                have ht' : t = x := by simpa using ht
+                simpa [ht'] using hx
+              after_ok := tail.after_ok }
+
+  def splitAfter (curr : NR) (x : NR) (hx : isAfter curr x) :
+      (xs : List NR) → List.Pairwise (· ≺ ·) (x :: xs) →
+      SplitWitness curr (x :: xs)
+    | [], _ =>
+        { before := []
+          touching := []
+          after := [x]
+          order := by simp
+          before_ok := by intro _ hb; cases hb
+          touch_ok := by intro _ hb; cases hb
+          after_ok := by
+            intro a ha
+            have ha' : a = x := by simpa using ha
+            simpa [ha'] using hx }
+    | y :: ys, ok =>
+        let head := List.pairwise_cons.1 ok
+        let okTail := head.2
+        have xBeforeY : x ≺ y := head.1 (by simp)
+        match NR.Rel3.classify y curr with
+        | NR.Rel3.right hy =>
+            let tail := splitAfter curr y hy ys okTail
+            { before := []
+              touching := []
+              after := x :: tail.after
+              order := by
+                have h : y :: ys = tail.after := by
+                  simpa [List.nil_append] using tail.order
+                simp [after, h, List.cons_append]
+              before_ok := by intro _ hb; cases hb
+              touch_ok := by intro _ hb; cases hb
+              after_ok := by
+                intro a ha
+                have ha' : a = x ∨ a ∈ tail.after := by
+                  simpa using ha
+                cases ha' with
+                | inl haEq =>
+                    subst haEq
+                    exact hx
+                | inr haMem =>
+                    exact tail.after_ok haMem }
+        | NR.Rel3.left hy =>
+            have hcy : curr ≺ y :=
+              before_trans hx xBeforeY
+            have h1 : curr.val.hi + 1 < y.val.lo := hcy
+            have h2 : y.val.lo ≤ y.val.hi := by
+              simpa [IntRange.nonempty] using y.property
+            have h1' : curr.val.hi + 1 < y.val.hi :=
+              lt_of_lt_of_le h1 h2
+            have h3 : y.val.hi + 1 < curr.val.lo := hy
+            have h2' : y.val.hi ≤ y.val.hi + 1 := by
+              have : (0 : Int) ≤ 1 := by decide
+              simpa using add_le_add_left this y.val.hi
+            have h1'' : curr.val.hi + 1 < y.val.hi + 1 :=
+              lt_of_lt_of_le h1' h2'
+            have hlt : curr.val.hi + 1 < curr.val.lo :=
+              lt_trans h1'' h3
+            exact (lt_irrefl _ hlt).elim
+        | NR.Rel3.overlap hy₁ hy₂ =>
+            have hcy : curr ≺ y :=
+              before_trans hx xBeforeY
+            cases hy₂ hcy
+end
+
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
-def splitRanges (curr : NR) (xs : List NR) : SplitWitness curr xs := by
-  classical
-  -- TODO: fill by combining `takeWhile` / `dropWhile` lemmas.
-  exact sorry
+def splitRanges (curr : NR) (xs : List NR)
+    (ok : List.Pairwise (· ≺ ·) xs) :
+    SplitWitness curr xs :=
+  splitBefore curr xs ok
 
 /-- Fold `NR.glue` across a list, starting from `curr`. -/
 def glueMany (curr : NR) (ts : List NR) : NR :=
@@ -143,6 +315,87 @@ lemma buildSplit_sets
     glueMany_sets_touching curr touching ht, Set.union_left_comm,
     Set.union_assoc, Set.union_comm]
 
+/-- Everything in `before` is before everything in `touching`. -/
+lemma split_before_before_touch
+    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (w : SplitWitness curr xs) :
+    ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃t⦄, t ∈ w.touching → b ≺ t := by
+  classical
+  have ok' :
+      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
+    simpa [w.order] using ok
+  have ok'' :
+      List.Pairwise (· ≺ ·)
+        (w.before ++ (w.touching ++ w.after)) := by
+    simpa [List.append_assoc] using ok'
+  obtain ⟨_, ok_tail, cross_before⟩ :=
+    List.pairwise_append.1 ok''
+  intro b hb t ht
+  have ht' : t ∈ w.touching ++ w.after := by
+    simp [List.mem_append, ht]
+  exact cross_before (a := b) (b := t) hb ht'
+
+/-- Everything in `before` is before everything in `after`. -/
+lemma split_before_before_after
+    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (w : SplitWitness curr xs) :
+    ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃a⦄, a ∈ w.after → b ≺ a := by
+  classical
+  have ok' :
+      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
+    simpa [w.order] using ok
+  have ok'' :
+      List.Pairwise (· ≺ ·)
+        (w.before ++ (w.touching ++ w.after)) := by
+    simpa [List.append_assoc] using ok'
+  obtain ⟨_, ok_tail, cross_before⟩ :=
+    List.pairwise_append.1 ok''
+  intro b hb a ha
+  have ha' : a ∈ w.touching ++ w.after := by
+    simp [List.mem_append, ha]
+  exact cross_before (a := b) (b := a) hb ha'
+
+/-- Everything in `touching` is before everything in `after`. -/
+lemma split_touch_before_after
+    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (w : SplitWitness curr xs) :
+    ∀ ⦃t⦄, t ∈ w.touching → ∀ ⦃a⦄, a ∈ w.after → t ≺ a := by
+  classical
+  have ok' :
+      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
+    simpa [w.order] using ok
+  have ok'' :
+      List.Pairwise (· ≺ ·)
+        (w.before ++ (w.touching ++ w.after)) := by
+    simpa [List.append_assoc] using ok'
+  obtain ⟨_, ok_tail, _⟩ :=
+    List.pairwise_append.1 ok''
+  obtain ⟨_, _, cross_touch⟩ :=
+    List.pairwise_append.1 ok_tail
+  intro t ht a ha
+  exact cross_touch (a := t) (b := a) ht ha
+
+/-- Legality for Algo B rebuild:
+`before ++ [glueMany curr touching] ++ after` is pairwise `(· ≺ ·)`. -/
+lemma buildSplit_pairwise
+    (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
+    (w : SplitWitness curr xs)
+    (htouch : ∀ t ∈ w.touching, isTouch curr t) :
+    List.Pairwise (· ≺ ·)
+      (buildSplit curr w.before w.touching w.after) := by
+  /- TODO:
+    * From A, we have:
+      - `b ∈ before` → `t ∈ touching` → `b ≺ t`
+      - `b ∈ before` → `a ∈ after`    → `b ≺ a`
+      - `t ∈ touching` → `a ∈ after`   → `t ≺ a`
+    * Show `before ≺ glueMany curr touching`:
+      fold over touching using `before_glue_of_before` from Basic.lean.
+    * Show `glueMany curr touching ≺ after`:
+      similar fold, or use `split_touch_before_after` plus `before_glue_of_before`.
+    * Combine with pairwise of `before` and `after` (from `ok` via `w.order`).
+  -/
+  sorry
+
 /-- New insertion algorithm reusing the existing `insert`. -/
 def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   internalAddA s r
@@ -155,12 +408,12 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
 lemma internalAddB_agrees_with_split_sets
     (s : RangeSetBlaze) (r : IntRange) (hr : r.nonempty) :
     let curr : NR := ⟨r, hr⟩
-    let w := splitRanges curr s.ranges
+    let w := splitRanges curr s.ranges s.ok
     listSet (buildSplit curr w.before w.touching w.after) =
       (internalAddB s r).toSet := by
   classical
   set curr : NR := ⟨r, hr⟩
-  let w := splitRanges curr s.ranges
+  let w := splitRanges curr s.ranges s.ok
   have hsplit :
       listSet s.ranges =
         listSet w.before ∪ listSet w.touching ∪ listSet w.after := by
