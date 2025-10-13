@@ -113,9 +113,13 @@ mutual
               touching := x :: tail.touching
               after := tail.after
               order := by
+                have hbefore :
+                    tail.before = [] :=
+                  splitTouching_tail_before_nil curr y ⟨hy₁, hy₂⟩ ys okTail
                 have h :
                     y :: ys = tail.touching ++ tail.after := by
-                  simpa [List.nil_append] using tail.order
+                  simpa [tail, hbefore, List.nil_append, List.cons_append,
+                    List.append_assoc] using tail.order
                 calc
                   x :: y :: ys = x :: (tail.touching ++ tail.after) := by
                     simpa [h]
@@ -221,54 +225,17 @@ mutual
               touching := []
               after := x :: tail.after
               order := by
-                classical
-                have hbefore : tail.before = [] := by
-                  cases tail.before with
-                  | nil => rfl
-                  | cons b bs =>
-                      have hbmem : b ∈ tail.before := by simp
-                      have hb_before : isBefore curr b := tail.before_ok hbmem
-                      have horder :
-                          y :: ys = b :: (bs ++ tail.touching ++ tail.after) := by
-                        simpa [List.cons_append, List.append_assoc] using tail.order
-                      have hy_eq : y = b := (List.cons.inj horder).1
-                      have hy_before : isBefore curr y := by
-                        simpa [hy_eq] using hb_before
-                      have hcy : curr ≺ y := hy
-                      have hcc : curr ≺ curr := before_trans hcy hy_before
-                      have hlt : curr.val.hi + 1 < curr.val.lo := hcc
-                      have hle : curr.val.lo ≤ curr.val.hi := by
-                        simpa [IntRange.nonempty] using curr.property
-                      have : False := by
-                        have hlt' : curr.val.hi + 1 < curr.val.hi :=
-                          lt_of_lt_of_le hlt hle
-                        have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-                        linarith
-                      exact this.elim
-                have htouch : tail.touching = [] := by
-                  cases tail.touching with
-                  | nil => rfl
-                  | cons t ts =>
-                      have htmem : t ∈ tail.touching := by simp
-                      have ht_touch : isTouch curr t := tail.touch_ok htmem
-                      have horder :
-                          y :: ys = tail.before ++ t :: ts ++ tail.after := by
-                        simpa [List.cons_append, List.append_assoc] using tail.order
-                      have horder' :
-                          y :: ys = t :: (ts ++ tail.after) := by
-                        simpa [hbefore, List.nil_append, List.cons_append,
-                          List.append_assoc] using horder
-                      have hy_eq : y = t := (List.cons.inj horder').1
-                      have hy_touch : isTouch curr y := by
-                        simpa [hy_eq] using ht_touch
-                      have hcy : curr ≺ y := hy
-                      have : False := hy_touch.2 hcy
-                      exact this.elim
-                have h : y :: ys = tail.after := by
-                  have h := tail.order
-                  simpa [hbefore, htouch, List.nil_append,
-                    List.cons_append, List.append_assoc] using h
-                simp [h, List.cons_append]
+                have hbefore :
+                    tail.before = [] :=
+                  splitAfter_tail_before_nil curr y hy ys okTail
+                have htouch :
+                    tail.touching = [] :=
+                  splitAfter_tail_touching_nil curr y hy ys okTail
+                have h :
+                    y :: ys = tail.after := by
+                  simpa [tail, hbefore, htouch, List.nil_append,
+                    List.cons_append, List.append_assoc] using tail.order
+                simp [List.cons_append, h]
               before_ok := by intro _ hb; cases hb
               touch_ok := by intro _ hb; cases hb
               after_ok := by
@@ -309,111 +276,103 @@ mutual
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
             False.elim (hy₂ hcy)
-end
 
-/-- Once we are in the touching phase, the recursive tail cannot place any
+  /-- Once we are in the touching phase, the recursive tail cannot place any
 element in the `before` block. -/
-lemma splitTouching_tail_before_nil
-    (curr y : NR) (hy : isTouch curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitTouching curr y hy ys ok).before = [] := by
-  classical
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; simp [splitTouching]
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | left hz =>
-          exact (hy.1 (before_trans hyz hz)).elim
-      | overlap hz₁ hz₂ =>
-          have ih' :
-              (splitTouching curr z ⟨hz₁, hz₂⟩ zs okTail).before = [] :=
-            ih _ ⟨hz₁, hz₂⟩ okTail
-          simp [splitTouching, hyz, hcls, okTail, ih']
-      | right hz =>
-          simp [splitTouching, hyz, hcls, okTail, hz]
-/-- Once we are in the after phase, the recursive tail cannot place any element
-in the `touching` block. -/
-lemma splitAfter_tail_touching_nil
-    (curr y : NR) (hy : isAfter curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitAfter curr y hy ys ok).touching = [] := by
-  classical
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; simp [splitAfter]
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | right hz =>
-          have ih' :
-              (splitAfter curr z hz zs okTail).touching = [] :=
-            ih _ hz okTail
-          simp [splitAfter, hcls, hyz, okTail, hz, ih']
-      | left hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := by
-            simpa [IntRange.nonempty] using z.property
-          have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
-          have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by
-            have : (0 : Int) ≤ 1 := by decide
-            simpa using add_le_add_left this z.val.hi
-          have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
-            lt_of_lt_of_le h1' h2'
-          have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          exact (lt_irrefl _ hlt).elim
-      | overlap hz₁ hz₂ =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz₂ hcy).elim
+  def splitTouching_tail_before_nil
+      (curr y : NR) (hy : isTouch curr y)
+      (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
+      (splitTouching curr y hy ys ok).before = [] := by
+    classical
+    revert y hy ok
+    induction ys with
+    | nil =>
+        intro y hy _; rfl
+    | cons z zs ih =>
+        intro y hy ok
+        rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+        have hyz : y ≺ z := hx_tail _ (by simp)
+        cases hcls : NR.Rel3.classify z curr with
+        | left hz =>
+            exact (hy.1 (before_trans hyz hz)).elim
+        | overlap hz₁ hz₂ =>
+            rfl
+        | right hz =>
+            rfl
 
-/-- Once we are in the after phase, the recursive tail cannot place any element
+  /-- Once we are in the after phase, the recursive tail cannot place any element
+in the `touching` block. -/
+  def splitAfter_tail_touching_nil
+      (curr y : NR) (hy : isAfter curr y)
+      (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
+      (splitAfter curr y hy ys ok).touching = [] := by
+    classical
+    revert y hy ok
+    induction ys with
+    | nil =>
+        intro y hy _; rfl
+    | cons z zs ih =>
+        intro y hy ok
+        rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+        have hyz : y ≺ z := hx_tail _ (by simp)
+        cases hcls : NR.Rel3.classify z curr with
+        | right hz =>
+            rfl
+        | left hz =>
+            have hcy : curr ≺ z := before_trans hy hyz
+            have h1 : curr.val.hi + 1 < z.val.lo := hcy
+            have h2 : z.val.lo ≤ z.val.hi := by
+              simpa [IntRange.nonempty] using z.property
+            have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
+            have h3 : z.val.hi + 1 < curr.val.lo := hz
+            have h2' : z.val.hi ≤ z.val.hi + 1 := by
+              have : (0 : Int) ≤ 1 := by decide
+              simpa using add_le_add_left this z.val.hi
+            have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
+              lt_of_lt_of_le h1' h2'
+            have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
+            exact (lt_irrefl _ hlt).elim
+        | overlap hz₁ hz₂ =>
+            have hcy : curr ≺ z := before_trans hy hyz
+            exact (hz₂ hcy).elim
+
+  /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `before` block. -/
-lemma splitAfter_tail_before_nil
-    (curr y : NR) (hy : isAfter curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitAfter curr y hy ys ok).before = [] := by
-  classical
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; simp [splitAfter]
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | right hz =>
-          have ih' :
-              (splitAfter curr z hz zs okTail).before = [] :=
-            ih _ hz okTail
-          simp [splitAfter, hcls, hyz, okTail, hz, ih']
-      | left hz =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := by
-            simpa [IntRange.nonempty] using z.property
-          have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
-          have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by
-            have : (0 : Int) ≤ 1 := by decide
-            simpa using add_le_add_left this z.val.hi
-          have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
-            lt_of_lt_of_le h1' h2'
-          have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have : False := (lt_irrefl _ hlt)
-          exact this.elim
-      | overlap hz₁ hz₂ =>
-          have hcy : curr ≺ z := before_trans hy hyz
-          exact (hz₂ hcy).elim
+  def splitAfter_tail_before_nil
+      (curr y : NR) (hy : isAfter curr y)
+      (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
+      (splitAfter curr y hy ys ok).before = [] := by
+    classical
+    revert y hy ok
+    induction ys with
+    | nil =>
+        intro y hy _; rfl
+    | cons z zs ih =>
+        intro y hy ok
+        rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+        have hyz : y ≺ z := hx_tail _ (by simp)
+        cases hcls : NR.Rel3.classify z curr with
+        | right hz =>
+            rfl
+        | left hz =>
+            have hcy : curr ≺ z := before_trans hy hyz
+            have h1 : curr.val.hi + 1 < z.val.lo := hcy
+            have h2 : z.val.lo ≤ z.val.hi := by
+              simpa [IntRange.nonempty] using z.property
+            have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
+            have h3 : z.val.hi + 1 < curr.val.lo := hz
+            have h2' : z.val.hi ≤ z.val.hi + 1 := by
+              have : (0 : Int) ≤ 1 := by decide
+              simpa using add_le_add_left this z.val.hi
+            have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
+              lt_of_lt_of_le h1' h2'
+            have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
+            have : False := (lt_irrefl _ hlt)
+            exact this.elim
+        | overlap hz₁ hz₂ =>
+            have hcy : curr ≺ z := before_trans hy hyz
+            exact (hz₂ hcy).elim
+end
 
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
 def splitRanges (curr : NR) (xs : List NR)
@@ -588,18 +547,144 @@ lemma buildSplit_pairwise
     (htouch : ∀ t ∈ w.touching, isTouch curr t) :
     List.Pairwise (· ≺ ·)
       (buildSplit curr w.before w.touching w.after) := by
-  /- TODO:
-    * From A, we have:
-      - `b ∈ before` → `t ∈ touching` → `b ≺ t`
-      - `b ∈ before` → `a ∈ after`    → `b ≺ a`
-      - `t ∈ touching` → `a ∈ after`   → `t ≺ a`
-    * Show `before ≺ glueMany curr touching`:
-      fold over touching using `before_glue_of_before` from Basic.lean.
-    * Show `glueMany curr touching ≺ after`:
-      similar fold, or use `split_touch_before_after` plus `before_glue_of_before`.
-    * Combine with pairwise of `before` and `after` (from `ok` via `w.order`).
-  -/
-  sorry
+  classical
+  set g := glueMany curr w.touching with hg
+  have ok_full :
+      List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
+    simpa [w.order] using ok
+  have h_split1 :=
+    List.pairwise_append.1 (by simpa [List.append_assoc] using ok_full)
+  have ok_before : List.Pairwise (· ≺ ·) w.before := h_split1.1
+  have ok_touch_after :
+      List.Pairwise (· ≺ ·) (w.touching ++ w.after) := h_split1.2.1
+  have h_split2 := List.pairwise_append.1 ok_touch_after
+  have ok_touching : List.Pairwise (· ≺ ·) w.touching := h_split2.1
+  have ok_after : List.Pairwise (· ≺ ·) w.after := h_split2.2.1
+  have h_before_glue :
+      ∀ b ∈ w.before, b ≺ g := by
+    intro b hb
+    have hb_curr : b ≺ curr := w.before_ok hb
+    have hb_touch :
+        ∀ t ∈ w.touching, b ≺ t := by
+      intro t ht
+      exact
+        split_before_before_touch
+          (curr := curr) (xs := xs) ok w hb ht
+    have hb_glue_aux :
+        ∀ (acc : NR) (ts : List NR),
+            (∀ t ∈ ts, isTouch acc t) →
+            (∀ t ∈ ts, b ≺ t) →
+            b ≺ acc →
+            b ≺ glueMany acc ts := by
+      intro acc ts
+      induction ts generalizing acc with
+      | nil =>
+          intro _ _ hb_acc; simpa [glueMany] using hb_acc
+      | cons t ts ih =>
+          intro htouch_ts hbefore_ts hb_acc
+          have htouch_head : isTouch acc t := htouch_ts t (by simp)
+          have hbefore_head : b ≺ t := hbefore_ts t (by simp)
+          have hb_glued : b ≺ NR.glue acc t :=
+            before_glue_of_before hb_acc hbefore_head
+          have htouch_tail :
+              ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
+            intro u hu
+            have htu : isTouch acc u := htouch_ts u (by simp [hu])
+            exact touch_after_glue_step acc t u htouch_head htu
+          have hbefore_tail :
+              ∀ u ∈ ts, b ≺ u := by
+            intro u hu
+            exact hbefore_ts u (by simp [hu])
+          have hb_tail :=
+            ih (NR.glue acc t) htouch_tail hbefore_tail hb_glued
+          simpa [glueMany] using hb_tail
+    have hb_before_glue :=
+      hb_glue_aux curr w.touching htouch hb_touch hb_curr
+    simpa [hg] using hb_before_glue
+  have h_glue_after :
+      ∀ a ∈ w.after, g ≺ a := by
+    intro a ha
+    have hcurr_after : curr ≺ a := w.after_ok ha
+    have htouch_to_a :
+        ∀ t ∈ w.touching, t ≺ a := by
+      intro t ht
+      exact
+        split_touch_before_after
+          (curr := curr) (xs := xs) ok w ht ha
+    have h_aux :
+        ∀ (acc : NR) (ts : List NR),
+            (∀ t ∈ ts, isTouch acc t) →
+            (∀ t ∈ ts, t ≺ a) →
+            acc ≺ a →
+            glueMany acc ts ≺ a := by
+      intro acc ts
+      induction ts generalizing acc with
+      | nil =>
+          intro _ _ hacc; simpa [glueMany] using hacc
+      | cons t ts ih =>
+          intro htouch_ts hbefore_ts hacc
+          have htouch_head : isTouch acc t := htouch_ts t (by simp)
+          have ht_before : t ≺ a := hbefore_ts t (by simp)
+          have h_glued : NR.glue acc t ≺ a := by
+            unfold NR.before IntRange.NR.glue IntRange.mergeRange
+            have hmax_lt :
+                max (acc.val.hi + 1) (t.val.hi + 1) < a.val.lo :=
+              max_lt_iff.mpr ⟨hacc, ht_before⟩
+            have hmax_succ_le :
+                max acc.val.hi t.val.hi + 1 ≤
+                    max (acc.val.hi + 1) (t.val.hi + 1) := by
+              by_cases h : acc.val.hi ≤ t.val.hi
+              · have h_le :
+                    t.val.hi + 1 ≤
+                      max (acc.val.hi + 1) (t.val.hi + 1) :=
+                  le_max_right _ _
+                simpa [max_eq_right h] using h_le
+              · have h' : t.val.hi ≤ acc.val.hi := le_of_not_ge h
+                have h_le :
+                    acc.val.hi + 1 ≤
+                      max (acc.val.hi + 1) (t.val.hi + 1) :=
+                  le_max_left _ _
+                simpa [max_eq_left h'] using h_le
+            exact lt_of_le_of_lt hmax_succ_le hmax_lt
+          have htouch_tail :
+              ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
+            intro u hu
+            have htu : isTouch acc u := htouch_ts u (by simp [hu])
+            exact touch_after_glue_step acc t u htouch_head htu
+          have hbefore_tail :
+              ∀ u ∈ ts, u ≺ a := by
+            intro u hu
+            exact hbefore_ts u (by simp [hu])
+          have :=
+            ih (NR.glue acc t) htouch_tail hbefore_tail h_glued
+          simpa [glueMany] using this
+    have h_glue := h_aux curr w.touching htouch htouch_to_a hcurr_after
+    simpa [hg] using h_glue
+  have pair_before_glue :
+      List.Pairwise (· ≺ ·) (w.before ++ [g]) :=
+    List.pairwise_append.mpr
+      ⟨ok_before,
+        List.pairwise_singleton (R := (· ≺ ·)) _,
+        by
+          intro b hb y hy
+          have hy' : y = g := List.mem_singleton.1 hy
+          subst hy'
+          exact h_before_glue b hb⟩
+  have pair_final :
+      List.Pairwise (· ≺ ·) ((w.before ++ [g]) ++ w.after) :=
+    List.pairwise_append.mpr
+      ⟨pair_before_glue,
+        ok_after,
+        by
+          intro x hx a ha
+          rcases List.mem_append.1 hx with hx | hx
+          · exact
+              split_before_before_after
+                (curr := curr) (xs := xs) ok w hx ha
+          · have hx' : x = g := List.mem_singleton.1 hx
+            subst hx'
+            exact h_glue_after a ha⟩
+  simpa [buildSplit, hg, List.append_assoc] using pair_final
 
 /-- New insertion algorithm reusing the existing `insert`. -/
 def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
@@ -649,6 +734,4 @@ lemma internalAddB_agrees_with_split_sets
     _ = (internalAddB s r).toSet := by
         simpa using (internalAddB_toSet s r).symm
 
-/-- Once we are in the touching phase, the recursive tail cannot place any
-element in the `before` block. -/
 end RangeSetBlaze
