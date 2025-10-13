@@ -353,7 +353,10 @@ lemma splitAfter_tail_touching_nil
       have hyz : y ≺ z := hx_tail _ (by simp)
       cases hcls : NR.Rel3.classify z curr with
       | right hz =>
-          simp [splitAfter, hcls, hyz, okTail, hz]
+          have ih' :
+              (splitAfter curr z hz zs okTail).touching = [] :=
+            ih _ hz okTail
+          simp [splitAfter, hcls, hyz, okTail, hz, ih']
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           have h1 : curr.val.hi + 1 < z.val.lo := hcy
@@ -385,12 +388,14 @@ lemma splitAfter_tail_before_nil
       intro y hy _; simp [splitAfter]
   | cons z zs ih =>
       intro y hy ok
-      cases hpair : List.pairwise_cons.1 ok with
-      | intro hx_tail okTail =>
-          have hyz : y ≺ z := hx_tail _ (by simp)
+      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+      have hyz : y ≺ z := hx_tail _ (by simp)
       cases hcls : NR.Rel3.classify z curr with
       | right hz =>
-          simp [splitAfter, hpair, hcls, hyz, hz]
+          have ih' :
+              (splitAfter curr z hz zs okTail).before = [] :=
+            ih _ hz okTail
+          simp [splitAfter, hcls, hyz, okTail, hz, ih']
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           have h1 : curr.val.hi + 1 < z.val.lo := hcy
@@ -646,28 +651,4 @@ lemma internalAddB_agrees_with_split_sets
 
 /-- Once we are in the touching phase, the recursive tail cannot place any
 element in the `before` block. -/
-lemma splitTouching_tail_before_nil
-    (curr y : NR) (hy : isTouch curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitTouching curr y hy ys ok).before = [] := by
-  classical
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; simp [splitTouching]
-  | cons z zs ih =>
-      intro y hy ok
-      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
-      have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | left hz =>
-          exact (hy.1 (before_trans hyz hz)).elim
-      | overlap hz₁ hz₂ =>
-          have ih' :
-              (splitTouching curr z ⟨hz₁, hz₂⟩ zs okTail).before = [] :=
-            ih _ ⟨hz₁, hz₂⟩ okTail
-          simp [splitTouching, hyz, hcls, okTail, ih']
-      | right hz =>
-          simp [splitTouching, hyz, hcls, okTail, hz]
-
 end RangeSetBlaze
