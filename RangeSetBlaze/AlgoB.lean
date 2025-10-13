@@ -97,22 +97,40 @@ mutual
             simpa [ht'] using hx
           after_ok := by intro _ hb; cases hb }
     | y :: ys, ok =>
-        let head := List.pairwise_cons.1 ok
-        let okTail := head.2
-        have xBeforeY : x ≺ y := head.1 (by simp)
+        have hx_tail := (List.pairwise_cons.1 ok).1
+        have okTail :
+            List.Pairwise (· ≺ ·) (y :: ys) :=
+          (List.pairwise_cons.1 ok).2
+        have xBeforeY : x ≺ y := hx_tail _ (by simp)
         match NR.Rel3.classify y curr with
         | NR.Rel3.left hy =>
             have hFalse : False :=
               hx.1 (before_trans xBeforeY hy)
-            by cases hFalse
+            False.elim hFalse
         | NR.Rel3.overlap hy₁ hy₂ =>
             let tail := splitTouching curr y ⟨hy₁, hy₂⟩ ys okTail
             { before := []
               touching := x :: tail.touching
               after := tail.after
               order := by
+                classical
+                have hbefore : tail.before = [] := by
+                  cases tail.before with
+                  | nil => rfl
+                  | cons b bs =>
+                      have hbmem : b ∈ tail.before := by simp
+                      have hb_before : isBefore curr b := tail.before_ok hbmem
+                      have horder :
+                          y :: ys = b :: (bs ++ tail.touching ++ tail.after) := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
+                      have hy_eq : y = b := (List.cons.inj horder).1
+                      have hy_before : isBefore curr y := by
+                        simpa [hy_eq] using hb_before
+                      exact (hy₁ hy_before).elim
                 have h : y :: ys = tail.touching ++ tail.after := by
-                  simpa [List.nil_append] using tail.order
+                  have h := tail.order
+                  simpa [hbefore, List.nil_append, List.cons_append,
+                    List.append_assoc] using h
                 calc
                   x :: y :: ys = x :: (tail.touching ++ tail.after) := by
                     simpa [h]
@@ -136,8 +154,53 @@ mutual
               touching := [x]
               after := tail.after
               order := by
+                classical
+                have hbefore : tail.before = [] := by
+                  cases tail.before with
+                  | nil => rfl
+                  | cons b bs =>
+                      have hbmem : b ∈ tail.before := by simp
+                      have hb_before : isBefore curr b := tail.before_ok hbmem
+                      have horder :
+                          y :: ys = b :: (bs ++ tail.touching ++ tail.after) := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
+                      have hy_eq : y = b := (List.cons.inj horder).1
+                      have hy_before : isBefore curr y := by
+                        simpa [hy_eq] using hb_before
+                      have hcy : curr ≺ y := hy
+                      have hcc : curr ≺ curr := before_trans hcy hy_before
+                      have hlt : curr.val.hi + 1 < curr.val.lo := hcc
+                      have hle : curr.val.lo ≤ curr.val.hi := by
+                        simpa [IntRange.nonempty] using curr.property
+                      have : False := by
+                        have hlt' : curr.val.hi + 1 < curr.val.hi :=
+                          lt_of_lt_of_le hlt hle
+                        have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
+                        linarith
+                      exact this.elim
+                have htouch : tail.touching = [] := by
+                  cases tail.touching with
+                  | nil => rfl
+                  | cons t ts =>
+                      have htmem : t ∈ tail.touching := by simp
+                      have ht_touch : isTouch curr t := tail.touch_ok htmem
+                      have horder :
+                          y :: ys = tail.before ++ t :: ts ++ tail.after := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
+                      have horder' :
+                          y :: ys = t :: (ts ++ tail.after) := by
+                        simpa [hbefore, List.nil_append, List.cons_append,
+                          List.append_assoc] using horder
+                      have hy_eq : y = t := (List.cons.inj horder').1
+                      have hy_touch : isTouch curr y := by
+                        simpa [hy_eq] using ht_touch
+                      have hcy : curr ≺ y := hy
+                      have : False := hy_touch.2 hcy
+                      exact this.elim
                 have h : y :: ys = tail.after := by
-                  simpa [List.nil_append] using tail.order
+                  have h := tail.order
+                  simpa [hbefore, htouch, List.nil_append,
+                    List.cons_append, List.append_assoc] using h
                 simp [List.cons_append, h]
               before_ok := by intro _ hb; cases hb
               touch_ok := by
@@ -161,9 +224,11 @@ mutual
             have ha' : a = x := by simpa using ha
             simpa [ha'] using hx }
     | y :: ys, ok =>
-        let head := List.pairwise_cons.1 ok
-        let okTail := head.2
-        have xBeforeY : x ≺ y := head.1 (by simp)
+        have hx_tail := (List.pairwise_cons.1 ok).1
+        have okTail :
+            List.Pairwise (· ≺ ·) (y :: ys) :=
+          (List.pairwise_cons.1 ok).2
+        have xBeforeY : x ≺ y := hx_tail _ (by simp)
         match NR.Rel3.classify y curr with
         | NR.Rel3.right hy =>
             let tail := splitAfter curr y hy ys okTail
@@ -171,9 +236,54 @@ mutual
               touching := []
               after := x :: tail.after
               order := by
+                classical
+                have hbefore : tail.before = [] := by
+                  cases tail.before with
+                  | nil => rfl
+                  | cons b bs =>
+                      have hbmem : b ∈ tail.before := by simp
+                      have hb_before : isBefore curr b := tail.before_ok hbmem
+                      have horder :
+                          y :: ys = b :: (bs ++ tail.touching ++ tail.after) := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
+                      have hy_eq : y = b := (List.cons.inj horder).1
+                      have hy_before : isBefore curr y := by
+                        simpa [hy_eq] using hb_before
+                      have hcy : curr ≺ y := hy
+                      have hcc : curr ≺ curr := before_trans hcy hy_before
+                      have hlt : curr.val.hi + 1 < curr.val.lo := hcc
+                      have hle : curr.val.lo ≤ curr.val.hi := by
+                        simpa [IntRange.nonempty] using curr.property
+                      have : False := by
+                        have hlt' : curr.val.hi + 1 < curr.val.hi :=
+                          lt_of_lt_of_le hlt hle
+                        have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
+                        linarith
+                      exact this.elim
+                have htouch : tail.touching = [] := by
+                  cases tail.touching with
+                  | nil => rfl
+                  | cons t ts =>
+                      have htmem : t ∈ tail.touching := by simp
+                      have ht_touch : isTouch curr t := tail.touch_ok htmem
+                      have horder :
+                          y :: ys = tail.before ++ t :: ts ++ tail.after := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
+                      have horder' :
+                          y :: ys = t :: (ts ++ tail.after) := by
+                        simpa [hbefore, List.nil_append, List.cons_append,
+                          List.append_assoc] using horder
+                      have hy_eq : y = t := (List.cons.inj horder').1
+                      have hy_touch : isTouch curr y := by
+                        simpa [hy_eq] using ht_touch
+                      have hcy : curr ≺ y := hy
+                      have : False := hy_touch.2 hcy
+                      exact this.elim
                 have h : y :: ys = tail.after := by
-                  simpa [List.nil_append] using tail.order
-                simp [after, h, List.cons_append]
+                  have h := tail.order
+                  simpa [hbefore, htouch, List.nil_append,
+                    List.cons_append, List.append_assoc] using h
+                simp [h, List.cons_append]
               before_ok := by intro _ hb; cases hb
               touch_ok := by intro _ hb; cases hb
               after_ok := by
@@ -183,7 +293,7 @@ mutual
                 cases ha' with
                 | inl haEq =>
                     subst haEq
-                    exact hx
+                    simpa using hx
                 | inr haMem =>
                     exact tail.after_ok haMem }
         | NR.Rel3.left hy =>
@@ -202,11 +312,18 @@ mutual
               lt_of_lt_of_le h1' h2'
             have hlt : curr.val.hi + 1 < curr.val.lo :=
               lt_trans h1'' h3
-            exact (lt_irrefl _ hlt).elim
-        | NR.Rel3.overlap hy₁ hy₂ =>
+            have hle : curr.val.lo ≤ curr.val.hi := by
+              simpa [IntRange.nonempty] using curr.property
+            have : False := by
+              have hlt' : curr.val.hi + 1 < curr.val.hi :=
+                lt_of_lt_of_le hlt hle
+              have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
+              linarith
+            this.elim
+        | NR.Rel3.overlap _ hy₂ =>
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
-            cases hy₂ hcy
+            False.elim (hy₂ hcy)
 end
 
 /-- Partition `xs` into the ranges before, touching, and after `curr`. -/
@@ -274,17 +391,16 @@ lemma glueMany_sets_touching
         intro u hu
         exact touch_after_glue_step curr t u htouch_t (htouch_tail u hu)
       have ih' := ih (NR.glue curr t) htouch_tail'
-      simp [glueMany, List.foldl] at ih'
+      simp [glueMany] at ih'
       calc
         (glueMany curr (t :: ts)).val.toSet
             = (glueMany (NR.glue curr t) ts).val.toSet := by
-              simp [glueMany, List.foldl]
+              simp [glueMany]
         _ = (NR.glue curr t).val.toSet ∪ listSet ts := ih'
         _ = (curr.val.toSet ∪ t.val.toSet) ∪ listSet ts := by
-              simpa [hglue, Set.union_left_comm, Set.union_assoc,
-                Set.union_comm]
+              simpa [hglue]
         _ = curr.val.toSet ∪ (t.val.toSet ∪ listSet ts) := by
-              simp [Set.union_left_comm, Set.union_assoc]
+              simp [Set.union_left_comm, Set.union_assoc, Set.union_comm]
         _ = curr.val.toSet ∪ listSet (t :: ts) := by
               simp [listSet_cons, Set.union_left_comm, Set.union_assoc]
 
