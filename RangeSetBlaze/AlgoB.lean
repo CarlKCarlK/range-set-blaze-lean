@@ -113,13 +113,9 @@ mutual
               touching := x :: tail.touching
               after := tail.after
               order := by
-                have hbefore :
-                    tail.before = [] :=
-                  splitTouching_tail_before_nil curr y ⟨hy₁, hy₂⟩ ys okTail
                 have h :
                     y :: ys = tail.touching ++ tail.after := by
-                  simpa [tail, hbefore, List.nil_append,
-                    List.cons_append, List.append_assoc] using tail.order
+                  simpa [List.nil_append] using tail.order
                 calc
                   x :: y :: ys = x :: (tail.touching ++ tail.after) := by
                     simpa [h]
@@ -340,31 +336,6 @@ lemma splitTouching_tail_before_nil
           simp [splitTouching, hyz, hcls, okTail, ih']
       | right hz =>
           simp [splitTouching, hyz, hcls, okTail, hz]
-/-- Once we are in the touching phase, the recursive tail cannot place any
-element in the `before` block. -/
-lemma splitTouching_tail_before_nil
-    (curr y : NR) (hy : isTouch curr y)
-    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
-    (splitTouching curr y hy ys ok).before = [] := by
-  classical
-  revert y hy ok
-  induction ys with
-  | nil =>
-      intro y hy _; simp [splitTouching]
-  | cons z zs ih =>
-      intro y hy ok
-      cases hpair : List.pairwise_cons.1 ok with
-      | intro hx_tail okTail =>
-          have hyz : y ≺ z := hx_tail _ (by simp)
-      cases hcls : NR.Rel3.classify z curr with
-      | left hz =>
-          have : False := hy.1 (before_trans hyz hz)
-          exact this.elim
-      | overlap hz₁ hz₂ =>
-          simp [splitTouching, hpair, hcls, hyz, hz₁, hz₂]
-      | right hz =>
-          simp [splitTouching, hpair, hcls, hyz, hz]
-
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `touching` block. -/
 lemma splitAfter_tail_touching_nil
@@ -378,12 +349,11 @@ lemma splitAfter_tail_touching_nil
       intro y hy _; simp [splitAfter]
   | cons z zs ih =>
       intro y hy ok
-      cases hpair : List.pairwise_cons.1 ok with
-      | intro hx_tail okTail =>
-          have hyz : y ≺ z := hx_tail _ (by simp)
+      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+      have hyz : y ≺ z := hx_tail _ (by simp)
       cases hcls : NR.Rel3.classify z curr with
       | right hz =>
-          simp [splitAfter, hpair, hcls, hyz, hz]
+          simp [splitAfter, hcls, hyz, okTail, hz]
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           have h1 : curr.val.hi + 1 < z.val.lo := hcy
@@ -397,8 +367,7 @@ lemma splitAfter_tail_touching_nil
           have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
             lt_of_lt_of_le h1' h2'
           have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have : False := (lt_irrefl _ hlt)
-          exact this.elim
+          exact (lt_irrefl _ hlt).elim
       | overlap hz₁ hz₂ =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (hz₂ hcy).elim
@@ -674,5 +643,31 @@ lemma internalAddB_agrees_with_split_sets
         rw [hs]
     _ = (internalAddB s r).toSet := by
         simpa using (internalAddB_toSet s r).symm
+
+/-- Once we are in the touching phase, the recursive tail cannot place any
+element in the `before` block. -/
+lemma splitTouching_tail_before_nil
+    (curr y : NR) (hy : isTouch curr y)
+    (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
+    (splitTouching curr y hy ys ok).before = [] := by
+  classical
+  revert y hy ok
+  induction ys with
+  | nil =>
+      intro y hy _; simp [splitTouching]
+  | cons z zs ih =>
+      intro y hy ok
+      rcases List.pairwise_cons.1 ok with ⟨hx_tail, okTail⟩
+      have hyz : y ≺ z := hx_tail _ (by simp)
+      cases hcls : NR.Rel3.classify z curr with
+      | left hz =>
+          exact (hy.1 (before_trans hyz hz)).elim
+      | overlap hz₁ hz₂ =>
+          have ih' :
+              (splitTouching curr z ⟨hz₁, hz₂⟩ zs okTail).before = [] :=
+            ih _ ⟨hz₁, hz₂⟩ okTail
+          simp [splitTouching, hyz, hcls, okTail, ih']
+      | right hz =>
+          simp [splitTouching, hyz, hcls, okTail, hz]
 
 end RangeSetBlaze
