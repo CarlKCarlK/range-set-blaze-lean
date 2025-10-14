@@ -759,9 +759,23 @@ lemma buildSplit_pairwise
             exact h_glue_after a ha⟩
   simpa [buildSplit, hg, List.append_assoc] using pair_final
 
-/-- New insertion algorithm reusing the existing `insert`. -/
+/-- New insertion algorithm reusing the split/build pipeline. -/
 def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
-  internalAddA s r
+  if hr : r.nonempty then
+    let curr : NR := ⟨r, hr⟩
+    let w := splitRanges curr s.ranges s.ok
+    { ranges := buildSplit curr w.before w.touching w.after
+      ok :=
+        buildSplit_pairwise
+          (curr := curr)
+          (xs := s.ranges)
+          (ok := s.ok)
+          (w := w)
+          (by
+            intro t ht
+            exact w.touch_ok ht) }
+  else
+    s
 
 lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddB s r).toSet = s.toSet ∪ r.toSet := by
