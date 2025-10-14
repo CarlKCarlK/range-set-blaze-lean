@@ -114,11 +114,10 @@ mutual
                 have hbefore : tail.before = [] := by
                   classical
                   cases hs : tail.before with
-                  | nil => simp [hs]
+                  | nil => rfl
                   | cons b bs =>
-                      have hbmem' : b ∈ b :: bs := by simp
                       have hbmem : b ∈ tail.before := by
-                        simpa [hs] using hbmem'
+                        simp [hs]
                       have hb_before : isBefore curr b :=
                         tail.before_ok hbmem
                       -- Put tail.order directly into a cons-shaped equality
@@ -142,8 +141,7 @@ mutual
                 have h :
                     y :: ys = tail.touching ++ tail.after := by
                   have h' := tail.order
-                  simp [tail, hbefore, List.nil_append, List.cons_append,
-                    List.append_assoc] at h'
+                  simp [tail, hbefore] at h'
                   exact h'
 
                 -- Finish: reshape with a single cons on the left
@@ -173,10 +171,10 @@ mutual
                 classical
                 have hbefore : tail.before = [] := by
                   cases hs : tail.before with
-                  | nil => simp [hs]
+                  | nil => rfl
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
-                        simpa [hs] using (by simp : b ∈ b :: bs)
+                        simp [hs]
                       have hb_before : isBefore curr b := tail.before_ok hbmem
                       have horder_cons :
                           y :: ys =
@@ -188,8 +186,7 @@ mutual
                       have hcy : curr ≺ y := hy
                       have hcc : curr ≺ curr := before_trans hcy hy_before
                       have hlt : curr.val.hi + 1 < curr.val.lo := hcc
-                      have hle : curr.val.lo ≤ curr.val.hi := by
-                        simpa [IntRange.nonempty] using curr.property
+                      have hle : curr.val.lo ≤ curr.val.hi := curr.property
                       have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
                       have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
                       have : False := by linarith
@@ -198,17 +195,15 @@ mutual
                 have htouch : tail.touching = [] := by
                   classical
                   cases hs : tail.touching with
-                  | nil => simp [hs]
+                  | nil => rfl
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
-                        simpa [hs] using (by simp : t ∈ t :: ts)
+                        simp [hs]
                       have ht_touch : isTouch curr t := tail.touch_ok htmem
                       have horder' :
                           y :: ys =
                             t :: (ts ++ tail.after) := by
-                        have horder := tail.order
-                        simpa [hbefore, hs, List.nil_append, List.cons_append,
-                          List.append_assoc] using horder
+                        simpa [hbefore, hs] using tail.order
                       have hy_eq : y = t := (List.cons.inj horder').1
                       have hy_touch : isTouch curr y := by
                         simpa [hy_eq] using ht_touch
@@ -216,10 +211,9 @@ mutual
 
                 have h : y :: ys = tail.after := by
                   have h := tail.order
-                  simp [hbefore, htouch, List.nil_append,
-                    List.cons_append, List.append_assoc] at h
+                  simp [hbefore, htouch] at h
                   exact h
-                simp [List.cons_append, h]
+                simp [h]
               before_ok := by intro _ hb; cases hb
               touch_ok := by
                 intro t ht
@@ -257,10 +251,10 @@ mutual
                 have hbefore : tail.before = [] := by
                   classical
                   cases hs : tail.before with
-                  | nil => simp [hs]
+                  | nil => rfl
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
-                        simpa [hs] using (by simp : b ∈ b :: bs)
+                        simp [hs]
                       have hb_before : isBefore curr b := tail.before_ok hbmem
                       have horder_cons :
                           y :: ys =
@@ -272,8 +266,7 @@ mutual
                       have hcy : curr ≺ y := hy
                       have hcc : curr ≺ curr := before_trans hcy hy_before
                       have hlt : curr.val.hi + 1 < curr.val.lo := hcc
-                      have hle : curr.val.lo ≤ curr.val.hi := by
-                        simpa [IntRange.nonempty] using curr.property
+                      have hle : curr.val.lo ≤ curr.val.hi := curr.property
                       have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
                       have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
                       have : False := by linarith
@@ -282,17 +275,15 @@ mutual
                 have htouch : tail.touching = [] := by
                   classical
                   cases hs : tail.touching with
-                  | nil => simp [hs]
+                  | nil => rfl
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
-                        simpa [hs] using (by simp : t ∈ t :: ts)
+                        simp [hs]
                       have ht_touch : isTouch curr t := tail.touch_ok htmem
                       have horder' :
                           y :: ys =
                             t :: (ts ++ tail.after) := by
-                        have horder := tail.order
-                        simpa [hbefore, hs, List.nil_append, List.cons_append,
-                          List.append_assoc] using horder
+                        simpa [hbefore, hs] using tail.order
                       have hy_eq : y = t := (List.cons.inj horder').1
                       have hy_touch : isTouch curr y := by
                         simpa [hy_eq] using ht_touch
@@ -300,9 +291,10 @@ mutual
 
                 have h :
                     y :: ys = tail.after := by
-                  simpa [tail, hbefore, htouch, List.nil_append,
-                    List.cons_append, List.append_assoc] using tail.order
-                simp [List.cons_append, h]
+                  have h := tail.order
+                  simp [tail, hbefore, htouch] at h
+                  exact h
+                simp [h]
               before_ok := by intro _ hb; cases hb
               touch_ok := by intro _ hb; cases hb
               after_ok := by
@@ -319,20 +311,16 @@ mutual
             have hcy : curr ≺ y :=
               before_trans hx xBeforeY
             have h1 : curr.val.hi + 1 < y.val.lo := hcy
-            have h2 : y.val.lo ≤ y.val.hi := by
-              simpa [IntRange.nonempty] using y.property
+            have h2 : y.val.lo ≤ y.val.hi := y.property
             have h1' : curr.val.hi + 1 < y.val.hi :=
               lt_of_lt_of_le h1 h2
             have h3 : y.val.hi + 1 < curr.val.lo := hy
-            have h2' : y.val.hi ≤ y.val.hi + 1 := by
-              have : (0 : Int) ≤ 1 := by decide
-              simpa using add_le_add_left this y.val.hi
+            have h2' : y.val.hi ≤ y.val.hi + 1 := by linarith
             have h1'' : curr.val.hi + 1 < y.val.hi + 1 :=
               lt_of_lt_of_le h1' h2'
             have hlt : curr.val.hi + 1 < curr.val.lo :=
               lt_trans h1'' h3
-            have hle : curr.val.lo ≤ curr.val.hi := by
-              simpa [IntRange.nonempty] using curr.property
+            have hle : curr.val.lo ≤ curr.val.hi := curr.property
             have : False := by
               have hlt' : curr.val.hi + 1 < curr.val.hi :=
                 lt_of_lt_of_le hlt hle
@@ -389,18 +377,14 @@ theorem splitAfter_tail_touching_nil
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := by
-            simpa [IntRange.nonempty] using z.property
+          have h2 : z.val.lo ≤ z.val.hi := z.property
           have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
           have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by
-            have : (0 : Int) ≤ 1 := by decide
-            simpa using add_le_add_left this z.val.hi
+          have h2' : z.val.hi ≤ z.val.hi + 1 := by linarith
           have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
             lt_of_lt_of_le h1' h2'
           have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have hle : curr.val.lo ≤ curr.val.hi := by
-            simpa [IntRange.nonempty] using curr.property
+          have hle : curr.val.lo ≤ curr.val.hi := curr.property
           have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
           have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
           have : False := by linarith
@@ -430,18 +414,14 @@ theorem splitAfter_tail_before_nil
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
           have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := by
-            simpa [IntRange.nonempty] using z.property
+          have h2 : z.val.lo ≤ z.val.hi := z.property
           have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
           have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by
-            have : (0 : Int) ≤ 1 := by decide
-            simpa using add_le_add_left this z.val.hi
+          have h2' : z.val.hi ≤ z.val.hi + 1 := by linarith
           have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
             lt_of_lt_of_le h1' h2'
           have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have hle : curr.val.lo ≤ curr.val.hi := by
-            simpa [IntRange.nonempty] using curr.property
+          have hle : curr.val.lo ≤ curr.val.hi := curr.property
           have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
           have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
           have : False := by linarith
@@ -522,11 +502,11 @@ lemma glueMany_sets_touching
               simp [glueMany]
         _ = (NR.glue curr t).val.toSet ∪ listSet ts := ih'
         _ = (curr.val.toSet ∪ t.val.toSet) ∪ listSet ts := by
-              simpa [hglue]
+              simp [hglue]
         _ = curr.val.toSet ∪ (t.val.toSet ∪ listSet ts) := by
-              simp [Set.union_left_comm, Set.union_assoc, Set.union_comm]
+              simp [Set.union_assoc]
         _ = curr.val.toSet ∪ listSet (t :: ts) := by
-              simp [listSet_cons, Set.union_left_comm, Set.union_assoc]
+              simp [listSet_cons]
 
 lemma listSet_append (xs ys : List NR) :
     listSet (xs ++ ys) = listSet xs ∪ listSet ys := by
@@ -535,7 +515,7 @@ lemma listSet_append (xs ys : List NR) :
       simp [listSet_nil]
   | cons x xs ih =>
       simp [listSet_cons, List.cons_append, Set.union_left_comm,
-        Set.union_assoc, ih]
+        Set.union_comm, ih]
 
 /-- Rebuild the list by gluing the touching block. -/
 def buildSplit (curr : NR) (before touching after : List NR) :
@@ -550,10 +530,10 @@ lemma buildSplit_sets
       curr.val.toSet ∪
         (listSet touching ∪ listSet before ∪ listSet after) := by
   classical
-  subst hx
+  cases hx
   simp [buildSplit, listSet_append, listSet_cons,
     glueMany_sets_touching curr touching ht, Set.union_left_comm,
-    Set.union_assoc, Set.union_comm]
+    Set.union_comm]
 
 /-- Everything in `before` is before everything in `touching`. -/
 lemma split_before_before_touch
@@ -710,17 +690,32 @@ lemma buildSplit_pairwise
                 max acc.val.hi t.val.hi + 1 ≤
                     max (acc.val.hi + 1) (t.val.hi + 1) := by
               by_cases h : acc.val.hi ≤ t.val.hi
-              · have h_le :
+              ·
+                have hmax_le : max acc.val.hi t.val.hi ≤ t.val.hi :=
+                  max_le_iff.mpr ⟨h, le_rfl⟩
+                have hmax_succ_le' :
+                    max acc.val.hi t.val.hi + 1 ≤ t.val.hi + 1 :=
+                  by
+                    have := add_le_add_right hmax_le (1 : Int)
+                    simpa using this
+                have t_succ_le :
                     t.val.hi + 1 ≤
                       max (acc.val.hi + 1) (t.val.hi + 1) :=
                   le_max_right _ _
-                simpa [max_eq_right h] using h_le
+                exact le_trans hmax_succ_le' t_succ_le
               · have h' : t.val.hi ≤ acc.val.hi := le_of_not_ge h
-                have h_le :
+                have hmax_le : max acc.val.hi t.val.hi ≤ acc.val.hi :=
+                  max_le_iff.mpr ⟨le_rfl, h'⟩
+                have hmax_succ_le' :
+                    max acc.val.hi t.val.hi + 1 ≤ acc.val.hi + 1 :=
+                  by
+                    have := add_le_add_right hmax_le (1 : Int)
+                    simpa using this
+                have acc_succ_le :
                     acc.val.hi + 1 ≤
                       max (acc.val.hi + 1) (t.val.hi + 1) :=
                   le_max_left _ _
-                simpa [max_eq_left h'] using h_le
+                exact le_trans hmax_succ_le' acc_succ_le
             exact lt_of_le_of_lt hmax_succ_le hmax_lt
           have htouch_tail :
               ∀ u ∈ ts, isTouch (NR.glue acc t) u := by
@@ -731,9 +726,11 @@ lemma buildSplit_pairwise
               ∀ u ∈ ts, u ≺ a := by
             intro u hu
             exact hbefore_ts u (by simp [hu])
-          have :=
+          have ih_result :=
             ih (NR.glue acc t) htouch_tail hbefore_tail h_glued
-          simpa [glueMany] using this
+          have ih_result' := ih_result
+          simp [glueMany] at ih_result'
+          exact ih_result'
     have h_glue := h_aux curr w.touching htouch htouch_to_a hcurr_after
     simpa [hg] using h_glue
   have pair_before_glue :
@@ -783,8 +780,7 @@ lemma internalAddB_agrees_with_split_sets
   have hsplit :
       listSet s.ranges =
         listSet w.before ∪ listSet w.touching ∪ listSet w.after := by
-    simpa [w.order, listSet_append, Set.union_left_comm,
-      Set.union_assoc, Set.union_comm]
+    simp [w.order, listSet_append, Set.union_assoc]
   have hcurr : curr.val.toSet = r.toSet := rfl
   have hs : s.toSet = listSet s.ranges := toSet_eq_listSet s
   have hbuild :
@@ -803,11 +799,10 @@ lemma internalAddB_agrees_with_split_sets
             (listSet w.touching ∪ listSet w.before ∪ listSet w.after) :=
             hbuild
     _ = listSet s.ranges ∪ r.toSet := by
-        simp [hcurr, hsplit, Set.union_left_comm, Set.union_comm,
-          Set.union_assoc]
+        simp [hcurr, hsplit, Set.union_comm]
     _ = s.toSet ∪ r.toSet := by
         rw [hs]
-    _ = (internalAddB s r).toSet := by
-        simpa using (internalAddB_toSet s r).symm
+    _ = (internalAddB s r).toSet :=
+        (internalAddB_toSet s r).symm
 
 end RangeSetBlaze
