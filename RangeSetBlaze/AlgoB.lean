@@ -118,21 +118,13 @@ mutual
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by simp
                       have hb_before : isBefore curr b := tail.before_ok hbmem
-                      -- Put tail.order into cons form on the RHS
-                      have horder := tail.order
-                      have horder :
+                      -- Put tail.order directly into a cons-shaped equality
+                      have horder_cons :
                           y :: ys =
-                            (b :: bs) ++ tail.touching ++ tail.after := by
-                        simpa using horder
-                      simp [List.cons_append, List.append_assoc] at horder
-                      -- horder : y :: ys = b :: (bs ++ tail.touching ++ tail.after)
+                            b :: (bs ++ tail.touching ++ tail.after) := by
+                        simpa [List.cons_append, List.append_assoc] using tail.order
                       -- If head is b, then y = b
-                      have hy_eq : y = b := by
-                        have horder_cons :
-                            y :: ys =
-                              b :: (bs ++ tail.touching ++ tail.after) := by
-                          simpa [List.cons_append, List.append_assoc] using horder
-                        exact (List.cons.inj horder_cons).1
+                      have hy_eq : y = b := (List.cons.inj horder_cons).1
                       -- So y is also before curr
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
