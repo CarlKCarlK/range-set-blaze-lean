@@ -113,6 +113,7 @@ mutual
               touching := x :: tail.touching
               after := tail.after
               order := by
+                -- Show tail.before = [] by contradiction
                 have hbefore : tail.before = [] := by
                   classical
                   cases tail.before with
@@ -120,19 +121,29 @@ mutual
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by simp
                       have hb_before : isBefore curr b := tail.before_ok hbmem
+                      -- Put tail.order into cons form on the RHS
                       have horder :
                           y :: ys =
                             b :: (bs ++ tail.touching ++ tail.after) := by
                         simpa [List.cons_append, List.append_assoc] using tail.order
+                      -- If head is b, then y = b
                       have hy_eq : y = b := (List.cons.inj horder).1
+                      -- So y is also before curr
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
+                      -- But we are in the "overlap" case, i.e. y touches curr
+                      -- Contradiction: touching means ¬ y ≺ curr
                       have : False := ⟨hy₁, hy₂⟩.1 hy_before
                       exact this.elim
+
+                -- With tail.before = [], tail.order simplifies to the desired concatenation
                 have h :
                     y :: ys = tail.touching ++ tail.after := by
+                  have h' := tail.order
                   simpa [tail, hbefore, List.nil_append, List.cons_append,
-                    List.append_assoc] using tail.order
+                    List.append_assoc] using h'
+
+                -- Finish: reshape with a single cons on the left
                 calc
                   x :: y :: ys = x :: (tail.touching ++ tail.after) := by
                     simpa [h]
