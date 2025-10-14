@@ -61,7 +61,7 @@ mutual
               order := by
                 -- This simultaneously rewrites `xs` via `tail.order`
                 -- and reshapes the RHS with cons/append associativity.
-                simpa [tail.order, List.cons_append, List.append_assoc]
+                simp [tail.order, List.cons_append, List.append_assoc]
               before_ok := by
                 intro b hb
                 have hb' : b = x ∨ b ∈ tail.before := by
@@ -90,7 +90,7 @@ mutual
           before_ok := by intro _ hb; cases hb
           touch_ok := by
             intro t ht
-            have ht' : t = x := by simpa using ht
+            have ht' : t = x := List.mem_singleton.mp ht
             simpa [ht'] using hx
           after_ok := by intro _ hb; cases hb }
     | y :: ys, ok =>
@@ -114,7 +114,7 @@ mutual
                 have hbefore : tail.before = [] := by
                   classical
                   cases hs : tail.before with
-                  | nil => simpa using hs
+                  | nil => simp [hs]
                   | cons b bs =>
                       have hbmem' : b ∈ b :: bs := by simp
                       have hbmem : b ∈ tail.before := by
@@ -142,20 +142,21 @@ mutual
                 have h :
                     y :: ys = tail.touching ++ tail.after := by
                   have h' := tail.order
-                  simpa [tail, hbefore, List.nil_append, List.cons_append,
-                    List.append_assoc] using h'
+                  simp [tail, hbefore, List.nil_append, List.cons_append,
+                    List.append_assoc] at h'
+                  exact h'
 
                 -- Finish: reshape with a single cons on the left
                 calc
                   x :: y :: ys = x :: (tail.touching ++ tail.after) := by
-                    simpa [h]
+                    simp [h]
                   _ = (x :: tail.touching) ++ tail.after := by
                     simp [List.cons_append]
               before_ok := by intro _ hb; cases hb
               touch_ok := by
                 intro t ht
-                have ht' : t = x ∨ t ∈ tail.touching := by
-                  simpa using ht
+                have ht' : t = x ∨ t ∈ tail.touching :=
+                  List.mem_cons.1 ht
                 cases ht' with
                 | inl htEq =>
                     subst htEq
@@ -172,7 +173,7 @@ mutual
                 classical
                 have hbefore : tail.before = [] := by
                   cases hs : tail.before with
-                  | nil => simpa using hs
+                  | nil => simp [hs]
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
                         simpa [hs] using (by simp : b ∈ b :: bs)
@@ -197,7 +198,7 @@ mutual
                 have htouch : tail.touching = [] := by
                   classical
                   cases hs : tail.touching with
-                  | nil => simpa using hs
+                  | nil => simp [hs]
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
                         simpa [hs] using (by simp : t ∈ t :: ts)
@@ -215,13 +216,14 @@ mutual
 
                 have h : y :: ys = tail.after := by
                   have h := tail.order
-                  simpa [hbefore, htouch, List.nil_append,
-                    List.cons_append, List.append_assoc] using h
+                  simp [hbefore, htouch, List.nil_append,
+                    List.cons_append, List.append_assoc] at h
+                  exact h
                 simp [List.cons_append, h]
               before_ok := by intro _ hb; cases hb
               touch_ok := by
                 intro t ht
-                have ht' : t = x := by simpa using ht
+                have ht' : t = x := List.mem_singleton.mp ht
                 simpa [ht'] using hx
               after_ok := tail.after_ok }
 
@@ -255,7 +257,7 @@ mutual
                 have hbefore : tail.before = [] := by
                   classical
                   cases hs : tail.before with
-                  | nil => simpa using hs
+                  | nil => simp [hs]
                   | cons b bs =>
                       have hbmem : b ∈ tail.before := by
                         simpa [hs] using (by simp : b ∈ b :: bs)
@@ -280,7 +282,7 @@ mutual
                 have htouch : tail.touching = [] := by
                   classical
                   cases hs : tail.touching with
-                  | nil => simpa using hs
+                  | nil => simp [hs]
                   | cons t ts =>
                       have htmem : t ∈ tail.touching := by
                         simpa [hs] using (by simp : t ∈ t :: ts)
