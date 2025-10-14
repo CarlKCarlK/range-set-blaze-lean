@@ -59,12 +59,9 @@ mutual
               touching := tail.touching
               after := tail.after
               order := by
-                have h := tail.order
-                calc
-                  x :: xs = x :: (tail.before ++ tail.touching ++ tail.after) := by
-                    simpa [h]
-                  _ = (x :: tail.before) ++ tail.touching ++ tail.after := by
-                    simp [List.cons_append]
+                -- This simultaneously rewrites `xs` via `tail.order`
+                -- and reshapes the RHS with cons/append associativity.
+                simpa [tail.order, List.cons_append, List.append_assoc]
               before_ok := by
                 intro b hb
                 have hb' : b = x ∨ b ∈ tail.before := by
@@ -122,12 +119,20 @@ mutual
                       have hbmem : b ∈ tail.before := by simp
                       have hb_before : isBefore curr b := tail.before_ok hbmem
                       -- Put tail.order into cons form on the RHS
+                      have horder := tail.order
                       have horder :
                           y :: ys =
-                            b :: (bs ++ tail.touching ++ tail.after) := by
-                        simpa [List.cons_append, List.append_assoc] using tail.order
+                            (b :: bs) ++ tail.touching ++ tail.after := by
+                        simpa using horder
+                      simp [List.cons_append, List.append_assoc] at horder
+                      -- horder : y :: ys = b :: (bs ++ tail.touching ++ tail.after)
                       -- If head is b, then y = b
-                      have hy_eq : y = b := (List.cons.inj horder).1
+                      have hy_eq : y = b := by
+                        have horder_cons :
+                            y :: ys =
+                              b :: (bs ++ tail.touching ++ tail.after) := by
+                          simpa [List.cons_append, List.append_assoc] using horder
+                        exact (List.cons.inj horder_cons).1
                       -- So y is also before curr
                       have hy_before : isBefore curr y := by
                         simpa [hy_eq] using hb_before
