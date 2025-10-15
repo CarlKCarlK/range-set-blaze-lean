@@ -5,6 +5,8 @@ namespace RangeSetBlaze
 open IntRange
 open IntRange.NR
 open scoped IntRange.NR
+
+section
 open Classical
 
 /-- Strictly before the current range (with a gap). -/
@@ -90,7 +92,7 @@ mutual
           before_ok := by intro _ hb; cases hb
           touch_ok := by
             intro t ht
-            have ht' : t = x := List.mem_singleton.mp ht
+            have ht' : t = x := by simpa using ht
             simpa [ht'] using hx
           after_ok := by intro _ hb; cases hb }
     | y :: ys, ok =>
@@ -217,7 +219,7 @@ mutual
               before_ok := by intro _ hb; cases hb
               touch_ok := by
                 intro t ht
-                have ht' : t = x := List.mem_singleton.mp ht
+                have ht' : t = x := by simpa using ht
                 simpa [ht'] using hx
               after_ok := tail.after_ok }
 
@@ -339,7 +341,6 @@ theorem splitTouching_tail_before_nil
     (curr y : NR) (hy : isTouch curr y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitTouching curr y hy ys ok).before = [] := by
-  classical
   revert y hy ok
   induction ys with
   | nil =>
@@ -356,13 +357,28 @@ theorem splitTouching_tail_before_nil
       | right hz =>
           simp [splitTouching, hcls]
 
+/-- Contradiction helper: `curr` cannot be both before and after `z`. -/
+private lemma absurd_cycle (curr z : NR)
+    (h₁ : curr ≺ z) (h₂ : z ≺ curr) : False := by
+  have hlt₁ : curr.val.hi + 1 < z.val.lo := h₁
+  have hle_z : z.val.lo ≤ z.val.hi := z.property
+  have hlt₂ : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le hlt₁ hle_z
+  have hlt₃ : z.val.hi + 1 < curr.val.lo := h₂
+  have hle_z_succ : z.val.hi ≤ z.val.hi + 1 := by linarith
+  have hlt₄ : curr.val.hi + 1 < z.val.hi + 1 := lt_of_lt_of_le hlt₂ hle_z_succ
+  have hlt₅ : curr.val.hi + 1 < curr.val.lo := lt_trans hlt₄ hlt₃
+  have hle_curr : curr.val.lo ≤ curr.val.hi := curr.property
+  have hlt₆ : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt₅ hle_curr
+  have : curr.val.hi + 1 ≤ curr.val.hi := hlt₆.le
+  have : False := by linarith
+  exact this
+
 /-- Once we are in the after phase, the recursive tail cannot place any element
 in the `touching` block. -/
 theorem splitAfter_tail_touching_nil
     (curr y : NR) (hy : isAfter curr y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitAfter curr y hy ys ok).touching = [] := by
-  classical
   revert y hy ok
   induction ys with
   | nil =>
@@ -376,19 +392,7 @@ theorem splitAfter_tail_touching_nil
           simp [splitAfter, hcls]
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := z.property
-          have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
-          have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by linarith
-          have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
-            lt_of_lt_of_le h1' h2'
-          have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have hle : curr.val.lo ≤ curr.val.hi := curr.property
-          have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
-          have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-          have : False := by linarith
-          exact this.elim
+          exact (absurd_cycle curr z hcy hz).elim
       | overlap hz₁ hz₂ =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (hz₂ hcy).elim
@@ -399,7 +403,6 @@ theorem splitAfter_tail_before_nil
     (curr y : NR) (hy : isAfter curr y)
     (ys : List NR) (ok : List.Pairwise (· ≺ ·) (y :: ys)) :
     (splitAfter curr y hy ys ok).before = [] := by
-  classical
   revert y hy ok
   induction ys with
   | nil =>
@@ -413,19 +416,7 @@ theorem splitAfter_tail_before_nil
           simp [splitAfter, hcls]
       | left hz =>
           have hcy : curr ≺ z := before_trans hy hyz
-          have h1 : curr.val.hi + 1 < z.val.lo := hcy
-          have h2 : z.val.lo ≤ z.val.hi := z.property
-          have h1' : curr.val.hi + 1 < z.val.hi := lt_of_lt_of_le h1 h2
-          have h3 : z.val.hi + 1 < curr.val.lo := hz
-          have h2' : z.val.hi ≤ z.val.hi + 1 := by linarith
-          have h1'' : curr.val.hi + 1 < z.val.hi + 1 :=
-            lt_of_lt_of_le h1' h2'
-          have hlt : curr.val.hi + 1 < curr.val.lo := lt_trans h1'' h3
-          have hle : curr.val.lo ≤ curr.val.hi := curr.property
-          have hlt' : curr.val.hi + 1 < curr.val.hi := lt_of_lt_of_le hlt hle
-          have : curr.val.hi + 1 ≤ curr.val.hi := hlt'.le
-          have : False := by linarith
-          exact this.elim
+          exact (absurd_cycle curr z hcy hz).elim
       | overlap hz₁ hz₂ =>
           have hcy : curr ≺ z := before_trans hy hyz
           exact (hz₂ hcy).elim
@@ -478,10 +469,9 @@ lemma glueMany_sets_touching
     (htouch : ∀ t ∈ ts, isTouch curr t) :
     (glueMany curr ts).val.toSet =
       curr.val.toSet ∪ listSet ts := by
-  classical
   induction ts generalizing curr with
   | nil =>
-      simp [glueMany, listSet_nil]
+      simp [glueMany]
   | cons t ts ih =>
       have htouch_t : isTouch curr t := htouch _ (by simp)
       have htouch_tail : ∀ u ∈ ts, isTouch curr u := by
@@ -496,26 +486,17 @@ lemma glueMany_sets_touching
         exact touch_after_glue_step curr t u htouch_t (htouch_tail u hu)
       have ih' := ih (NR.glue curr t) htouch_tail'
       simp [glueMany] at ih'
-      calc
-        (glueMany curr (t :: ts)).val.toSet
-            = (glueMany (NR.glue curr t) ts).val.toSet := by
-              simp [glueMany]
-        _ = (NR.glue curr t).val.toSet ∪ listSet ts := ih'
-        _ = (curr.val.toSet ∪ t.val.toSet) ∪ listSet ts := by
-              simp [hglue]
-        _ = curr.val.toSet ∪ (t.val.toSet ∪ listSet ts) := by
-              simp [Set.union_assoc]
-        _ = curr.val.toSet ∪ listSet (t :: ts) := by
-              simp [listSet_cons]
+      simp [glueMany, ih', hglue, listSet_cons,
+        Set.union_left_comm, Set.union_comm]
 
-lemma listSet_append (xs ys : List NR) :
+@[simp] lemma listSet_append (xs ys : List NR) :
     listSet (xs ++ ys) = listSet xs ∪ listSet ys := by
   induction xs with
   | nil =>
-      simp [listSet_nil]
+      simp
   | cons x xs ih =>
-      simp [listSet_cons, List.cons_append, Set.union_left_comm,
-        Set.union_comm, ih]
+      simp [listSet_cons, List.cons_append, ih,
+        Set.union_left_comm, Set.union_comm]
 
 /-- Rebuild the list by gluing the touching block. -/
 def buildSplit (curr : NR) (before touching after : List NR) :
@@ -529,18 +510,15 @@ lemma buildSplit_sets
     listSet (buildSplit curr before touching after) =
       curr.val.toSet ∪
         (listSet touching ∪ listSet before ∪ listSet after) := by
-  classical
   cases hx
-  simp [buildSplit, listSet_append, listSet_cons,
-    glueMany_sets_touching curr touching ht, Set.union_left_comm,
-    Set.union_comm]
+  simp [buildSplit, glueMany_sets_touching curr touching ht,
+    Set.union_left_comm, Set.union_comm]
 
 /-- Everything in `before` is before everything in `touching`. -/
 lemma split_before_before_touch
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃t⦄, t ∈ w.touching → b ≺ t := by
-  classical
   have ok' :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
     simpa [w.order] using ok
@@ -560,7 +538,6 @@ lemma split_before_before_after
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃b⦄, b ∈ w.before → ∀ ⦃a⦄, a ∈ w.after → b ≺ a := by
-  classical
   have ok' :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
     simpa [w.order] using ok
@@ -580,7 +557,6 @@ lemma split_touch_before_after
     (curr : NR) {xs} (ok : List.Pairwise (· ≺ ·) xs)
     (w : SplitWitness curr xs) :
     ∀ ⦃t⦄, t ∈ w.touching → ∀ ⦃a⦄, a ∈ w.after → t ≺ a := by
-  classical
   have ok' :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
     simpa [w.order] using ok
@@ -603,7 +579,6 @@ lemma buildSplit_pairwise
     (htouch : ∀ t ∈ w.touching, isTouch curr t) :
     List.Pairwise (· ≺ ·)
       (buildSplit curr w.before w.touching w.after) := by
-  classical
   set g := glueMany curr w.touching with hg
   have ok_full :
       List.Pairwise (· ≺ ·) (w.before ++ w.touching ++ w.after) := by
@@ -737,11 +712,10 @@ lemma buildSplit_pairwise
       List.Pairwise (· ≺ ·) (w.before ++ [g]) :=
     List.pairwise_append.mpr
       ⟨ok_before,
-        List.pairwise_singleton (R := (· ≺ ·)) _,
+      List.pairwise_singleton (R := (· ≺ ·)) _,
         by
           intro b hb y hy
-          have hy' : y = g := List.mem_singleton.1 hy
-          subst hy'
+          rcases List.mem_singleton.1 hy with rfl
           exact h_before_glue b hb⟩
   have pair_final :
       List.Pairwise (· ≺ ·) ((w.before ++ [g]) ++ w.after) :=
@@ -754,8 +728,7 @@ lemma buildSplit_pairwise
           · exact
               split_before_before_after
                 (curr := curr) (xs := xs) ok w hx ha
-          · have hx' : x = g := List.mem_singleton.1 hx
-            subst hx'
+          · rcases List.mem_singleton.1 hx with rfl
             exact h_glue_after a ha⟩
   simpa [buildSplit, hg, List.append_assoc] using pair_final
 
@@ -779,7 +752,6 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
 
 lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddB s r).toSet = s.toSet ∪ r.toSet := by
-  classical
   by_cases hr : r.nonempty
   · -- Nonempty range: unfold and compare via list sets.
     set curr : NR := ⟨r, hr⟩
@@ -801,8 +773,7 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
       simp [w.order, listSet_append, Set.union_assoc]
     have hcurr : curr.val.toSet = r.toSet := rfl
     have hs : s.toSet = listSet s.ranges := toSet_eq_listSet s
-    have hne : ¬ r.empty :=
-      (IntRange.nonempty_iff_not_empty r).1 hr
+    have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
     have htoSet :
         (internalAddB s r).toSet =
           curr.val.toSet ∪
@@ -822,10 +793,8 @@ lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
       _ = s.toSet ∪ r.toSet := by
           simp [Set.union_comm]
   · -- Empty range: adding it changes nothing.
-    have hEmpty : r.empty := by
-      classical
-      by_contra hnot
-      exact hr ((IntRange.nonempty_iff_not_empty r).mpr hnot)
+    have hEmpty : r.empty :=
+      not_not.mp ((not_congr (IntRange.nonempty_iff_not_empty r)).1 hr)
     have hEmptySet : r.toSet = (∅ : Set Int) :=
       IntRange.toSet_eq_empty_of_hi_lt_lo hEmpty
     have hToSet :
@@ -850,7 +819,6 @@ lemma internalAddB_agrees_with_split_sets
     let w := splitRanges curr s.ranges s.ok
     listSet (buildSplit curr w.before w.touching w.after) =
       (internalAddB s r).toSet := by
-  classical
   set curr : NR := ⟨r, hr⟩
   let w := splitRanges curr s.ranges s.ok
   have hsplit :
@@ -869,11 +837,17 @@ lemma internalAddB_agrees_with_split_sets
       (by
         intro t ht
         exact w.touch_ok ht)
+  have hne : ¬ r.empty := (IntRange.nonempty_iff_not_empty r).1 hr
+  have htoSet :
+      (internalAddB s r).toSet =
+        curr.val.toSet ∪
+          (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
+    simp [internalAddB, hne, curr, w, toSet_eq_listSet, hbuild,
+      -RangeSetBlaze.toSet_eq_listToSet]
   calc
     listSet (buildSplit curr w.before w.touching w.after)
         = curr.val.toSet ∪
-            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) :=
-            hbuild
+            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := hbuild
     _ = listSet s.ranges ∪ r.toSet := by
         simp [hcurr, hsplit, Set.union_comm]
     _ = s.toSet ∪ r.toSet := by
@@ -881,8 +855,12 @@ lemma internalAddB_agrees_with_split_sets
     _ = (internalAddB s r).toSet :=
         (internalAddB_toSet s r).symm
 
+end
+
 open IntRange
 open scoped IntRange.NR
+
+set_option linter.unusedTactic true
 
 -- Core spec check (re-exports the simp lemma ensures Algo B meets the spec)
 example (s : RangeSetBlaze) (r : IntRange) :
