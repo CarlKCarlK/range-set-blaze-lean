@@ -780,7 +780,68 @@ def internalAddB (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
 lemma internalAddB_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddB s r).toSet = s.toSet ∪ r.toSet := by
   classical
-  simpa [internalAddB] using internalAddA_toSet s r
+  by_cases hr : r.nonempty
+  · -- Nonempty range: unfold and compare via list sets.
+    set curr : NR := ⟨r, hr⟩
+    set w := splitRanges curr s.ranges s.ok
+    have hbuild :
+        listSet (buildSplit curr w.before w.touching w.after) =
+          curr.val.toSet ∪
+            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) :=
+      buildSplit_sets
+          (curr := curr) (xs := s.ranges)
+          (before := w.before) (touching := w.touching) (after := w.after)
+          w.order
+          (by
+            intro t ht
+            exact w.touch_ok ht)
+    have hsplit :
+        listSet s.ranges =
+          listSet w.before ∪ listSet w.touching ∪ listSet w.after := by
+      simp [w.order, listSet_append, Set.union_assoc]
+    have hcurr : curr.val.toSet = r.toSet := rfl
+    have hs : s.toSet = listSet s.ranges := toSet_eq_listSet s
+    have hsplit' :
+        listSet w.touching ∪ listSet w.before ∪ listSet w.after =
+          listSet s.ranges := by
+      simpa [Set.union_left_comm, Set.union_assoc] using hsplit.symm
+    have hne : ¬ r.empty := by
+      classical
+      simpa [IntRange.nonempty_iff_not_empty] using hr
+    have htoSet :
+        (internalAddB s r).toSet =
+          curr.val.toSet ∪
+            (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
+      simp [internalAddB, hne, curr, w, toSet_eq_listSet, hbuild,
+        -RangeSetBlaze.toSet_eq_listToSet]
+    calc
+      (internalAddB s r).toSet
+          = curr.val.toSet ∪
+              (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := htoSet
+      _ = r.toSet ∪ (listSet w.touching ∪ listSet w.before ∪ listSet w.after) := by
+          simp [hcurr]
+      _ = r.toSet ∪ listSet s.ranges := by
+          simp [hsplit']
+      _ = r.toSet ∪ s.toSet := by
+          simp [hs.symm]
+      _ = s.toSet ∪ r.toSet := by
+          simp [Set.union_comm]
+  · -- Empty range: adding it changes nothing.
+    have hEmpty : r.empty := by
+      classical
+      by_contra hnot
+      exact hr ((IntRange.nonempty_iff_not_empty r).mpr hnot)
+    have hEmptySet : r.toSet = (∅ : Set Int) :=
+      IntRange.toSet_eq_empty_of_hi_lt_lo hEmpty
+    have hToSet :
+        (internalAddB s r).toSet = s.toSet := by
+      simp [internalAddB, hEmpty, toSet_eq_listSet,
+        -RangeSetBlaze.toSet_eq_listToSet]
+    calc
+      (internalAddB s r).toSet
+          = s.toSet := hToSet
+      _ = s.toSet ∪ (∅ : Set Int) := by simp
+      _ = s.toSet ∪ r.toSet := by simpa [hEmptySet]
 
 lemma internalAddB_agrees_with_split_sets
     (s : RangeSetBlaze) (r : IntRange) (hr : r.nonempty) :

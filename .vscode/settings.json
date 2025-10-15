@@ -1,15 +1,26 @@
 {
     "cSpell.words": [
         "elim",
+        "hbefore",
+        "hbmem",
         "hcurr",
         "hempty",
         "hmin",
         "hmon",
+        "horder",
         "hpair",
         "hset",
         "hstruct",
+        "htouch",
         "hzxs",
         "infixl",
-        "rangesetblaze"
+        "rangesetblaze",
+        "htmem",
+        "hcls",
+        "hmax",
+        "hglue",
+        "hacc",
+        "hbuild",
+        "hnot",
     ]
 }
