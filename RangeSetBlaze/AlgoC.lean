@@ -3,96 +3,89 @@ import RangeSetBlaze.Basic
 namespace RangeSetBlaze
 
 open IntRange
+open IntRange.NR
+open scoped IntRange.NR
 
-/-!
-Ports the production Rust algorithm into Lean using simple lists.
-We keep the data manipulation faithful to the original logic but replace
-all algebraic arguments with `sorry` placeholders so that the file builds today.
+/-
+`Algo C` reimplementation that mirrors the production Rust insertion logic
+while operating directly on the `NR` and `RangeSetBlaze` structures.
+All required invariants are deferred with `sorry` placeholders so the
+module builds while proofs are filled in later.
 -/
 
-private def toPairs (s : RangeSetBlaze) : List (Int × Int) :=
-  s.ranges.map fun r => (r.val.lo, r.val.hi)
+private def mkNRUnsafe (lo hi : Int) : NR :=
+  Subtype.mk { lo := lo, hi := hi } (by sorry)
 
-private def fromPairs (pairs : List (Int × Int)) : RangeSetBlaze :=
-  { ranges :=
-      pairs.map fun p =>
-        let lo := p.1
-        let hi := p.2
-        let r : IntRange := { lo := lo, hi := hi }
-        have : r.nonempty := by
-          sorry
-        ⟨r, this⟩
-    ok := by
-      sorry }
+private def fromNRsUnsafe (xs : List NR) : RangeSetBlaze :=
+  { ranges := xs, ok := by sorry }
 
-private def deleteExtraPairs (pairs : List (Int × Int)) (start stop : Int) :
-    List (Int × Int) :=
-  let split := List.span (fun p : Int × Int => p.1 < start) pairs
-  let before := split.1
-  let rest := split.2
+private def deleteExtraNRs (xs : List NR) (start stop : Int) :
+    List NR :=
+  let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+  let before := split.fst
+  let rest := split.snd
   match rest with
-  | [] => pairs
+  | [] => xs
   | curr :: tail =>
-      let currStart := curr.1
-      -- Merge any following ranges whose start sits inside the grown interval.
-      let rec loop (currentStop : Int) (pending : List (Int × Int)) :
-          (Int × Int) × List (Int × Int) :=
+      let initialHi := max curr.val.hi stop
+      let initial := mkNRUnsafe curr.val.lo initialHi
+      let rec loop (current : NR) (pending : List NR) :
+          Prod NR (List NR) :=
         match pending with
-        | [] => ((currStart, currentStop), [])
-        | (nextStart, nextStop) :: pendingTail =>
-            if nextStart ≤ currentStop + 1 then
-              let extended := max currentStop nextStop
-              loop extended pendingTail
+        | [] => (current, [])
+        | next :: pendingTail =>
+            if decide (next.val.lo <= current.val.hi + 1) then
+              let newLo := current.val.lo
+              let newHi := max current.val.hi next.val.hi
+              let merged := mkNRUnsafe newLo newHi
+              loop merged pendingTail
             else
-              ((currStart, currentStop), (nextStart, nextStop) :: pendingTail)
-      let merged := loop stop tail
-      before ++ merged.1 :: merged.2
+              (current, next :: pendingTail)
+      let result := loop initial tail
+      before ++ (result.fst :: result.snd)
 
-private def internalAdd2Pairs (pairs : List (Int × Int)) (start stop : Int) :
-    List (Int × Int) :=
-  let split := List.span (fun p : Int × Int => p.1 < start) pairs
-  let before := split.1
-  let after := split.2
-  deleteExtraPairs (before ++ (start, stop) :: after) start stop
+private def internalAdd2NRs (xs : List NR) (start stop : Int) :
+    List NR :=
+  let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+  let before := split.fst
+  let after := split.snd
+  let inserted := mkNRUnsafe start stop
+  deleteExtraNRs (before ++ (inserted :: after)) start stop
 
 def delete_extra (s : RangeSetBlaze) (internalRange : IntRange) :
     RangeSetBlaze :=
   let start := internalRange.lo
   let stop := internalRange.hi
-  let pairs := toPairs s
-  fromPairs (deleteExtraPairs pairs start stop)
+  fromNRsUnsafe (deleteExtraNRs s.ranges start stop)
 
 def internalAdd2 (s : RangeSetBlaze) (internalRange : IntRange) :
     RangeSetBlaze :=
   let start := internalRange.lo
   let stop := internalRange.hi
-  let pairs := toPairs s
-  fromPairs (internalAdd2Pairs pairs start stop)
+  fromNRsUnsafe (internalAdd2NRs s.ranges start stop)
 
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
-  if stop < start then
+  if _hstop : stop < start then
     s
   else
-    let pairs := toPairs s
-    let split := List.span (fun p : Int × Int => p.1 ≤ start) pairs
-    let before := split.1
-    let after := split.2
-    let lastOpt := List.getLast? before
-    let prefixRanges := List.dropLast before
-    match lastOpt with
+    let xs := s.ranges
+    let split := List.span (fun nr => decide (nr.val.lo <= start)) xs
+    let before := split.fst
+    let after := split.snd
+    match List.getLast? before with
     | none =>
         internalAdd2 s r
     | some prev =>
-        let prevStart := prev.1
-        let prevStop := prev.2
-        if prevStop + 1 < start then
+        if decide (prev.val.hi + 1 < start) then
           internalAdd2 s r
-        else if prevStop < stop then
-          let extended := prefixRanges ++ (prevStart, stop) :: after
-          let extendedSet := fromPairs extended
-          delete_extra extendedSet { lo := prevStart, hi := stop }
+        else if decide (prev.val.hi < stop) then
+          let extendedList :=
+            List.dropLast before ++ (mkNRUnsafe prev.val.lo stop :: after)
+          let mergedSet := fromNRsUnsafe extendedList
+          let target : IntRange := { lo := prev.val.lo, hi := stop }
+          delete_extra mergedSet target
         else
           s
 
