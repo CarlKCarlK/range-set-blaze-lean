@@ -1,4 +1,5 @@
 import RangeSetBlaze
+import RangeSetBlaze.AlgoC
 
 open IntRange
 open IntRange.NR
@@ -30,10 +31,10 @@ def baseSet : RangeSetBlaze :=
         decide
       · exact List.pairwise_singleton (R := (· ≺ ·)) (a := r2)⟩
 
-def addTouch   : RangeSetBlaze := internalAdd baseSet (ir 3 4)
-def addOverlap : RangeSetBlaze := internalAdd baseSet (ir 2 6)
-def addLeft    : RangeSetBlaze := internalAdd baseSet (ir (-5) (-3))
-def addEmpty   : RangeSetBlaze := internalAdd baseSet (ir 10 5)
+def addTouch   : RangeSetBlaze := internalAddC baseSet (ir 3 4)
+def addOverlap : RangeSetBlaze := internalAddC baseSet (ir 2 6)
+def addLeft    : RangeSetBlaze := internalAddC baseSet (ir (-5) (-3))
+def addEmpty   : RangeSetBlaze := internalAddC baseSet (ir 10 5)
 
 namespace RangeSetBlaze
 
@@ -55,7 +56,7 @@ def samplePoints : List Int :=
 #eval! samplePoints.filter (fun i => contains addEmpty i)
 
 example : 4 ∈ addTouch.toSet := by
-  have hEq := RangeSetBlaze.internalAdd_toSet baseSet (ir 3 4)
+  have hEq := RangeSetBlaze.internalAddC_toSet baseSet (ir 3 4)
   have hUnion :
       4 ∈ baseSet.toSet ∪ (ir 3 4).toSet := by
     have : 4 ∈ baseSet.toSet ∨ 4 ∈ (ir 3 4).toSet :=
@@ -67,7 +68,7 @@ example : 4 ∈ addTouch.toSet := by
   simpa [addTouch] using hGoal
 
 example : -4 ∈ addLeft.toSet := by
-  have hEq := RangeSetBlaze.internalAdd_toSet baseSet (ir (-5) (-3))
+  have hEq := RangeSetBlaze.internalAddC_toSet baseSet (ir (-5) (-3))
   have hUnion :
       -4 ∈ baseSet.toSet ∪ (ir (-5) (-3)).toSet := by
     have :
