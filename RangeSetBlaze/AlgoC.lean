@@ -159,9 +159,34 @@ private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
         exact hall z (by simp [hz])
       simp [hy, ih hys]
 
+private def loLE (a b : NR) : Prop :=
+  a.val.lo ≤ b.val.lo
+
+private lemma span_suffix_all_ge_start_of_chain
+    (xs : List NR) (start : Int)
+    (hchain : List.Chain' loLE xs) :
+    let p : NR → Bool := fun nr => decide (nr.val.lo < start)
+    let split := List.span p xs
+    ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
+  classical
+  sorry
+
 @[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
     deleteExtraNRs.loop current [] = (current, []) := by
   simp [deleteExtraNRs.loop]
+
+/-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
+private lemma deleteExtraNRs_sets_after_splice_of_chain
+    (xs : List NR) (start stop : Int) (h : start ≤ stop)
+    (hchain : List.Chain' loLE xs) :
+    let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+    let before := split.fst
+    let after := split.snd
+    let inserted := mkNR start stop h
+    listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+      listSet before ∪ inserted.val.toSet ∪ listSet after := by
+  classical
+  sorry
 
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
