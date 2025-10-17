@@ -159,6 +159,10 @@ private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
         exact hall z (by simp [hz])
       simp [hy, ih hys]
 
+@[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
+    deleteExtraNRs.loop current [] = (current, []) := by
+  simp [deleteExtraNRs.loop]
+
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
 private lemma union_touch_eq_Icc_max
