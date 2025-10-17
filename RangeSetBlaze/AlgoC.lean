@@ -16,11 +16,27 @@ module builds while proofs are filled in later.
 private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
-private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
-  ⟨{ lo := lo, hi := hi }, h⟩
+private def mkNR (lo hi : Int) (h : lo = hi) : NR :=
+  ?{ lo := lo, hi := hi }, h?
 
 private def fromNRsUnsafe (xs : List NR) : RangeSetBlaze :=
   { ranges := xs, ok := by sorry }
+
+private def coalesce (current : NR) (pending : List NR) :
+    NR � List NR :=
+  match pending with
+  | [] => (current, [])
+  | next :: pendingTail =>
+      if decide (next.val.lo = current.val.hi + 1) then
+        let newLo := current.val.lo
+        let newHi := max current.val.hi next.val.hi
+        have hcurr : current.val.lo = current.val.hi := current.property
+        have hmax : current.val.hi = newHi := le_max_left _ _
+        have hmerged : newLo = newHi := le_trans hcurr hmax
+        let merged := mkNR newLo newHi hmerged
+        coalesce merged pendingTail
+      else
+        (current, next :: pendingTail)
 
 private def deleteExtraNRs (xs : List NR) (start stop : Int) :
     List NR :=
@@ -31,26 +47,11 @@ private def deleteExtraNRs (xs : List NR) (start stop : Int) :
   | [] => xs
   | curr :: tail =>
       let initialHi := max curr.val.hi stop
-      have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
-      have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
-      have hinit : curr.val.lo ≤ initialHi := le_trans hcurr hmax
+      have hcurr : curr.val.lo = curr.val.hi := curr.property
+      have hmax : curr.val.hi = initialHi := le_max_left _ _
+      have hinit : curr.val.lo = initialHi := le_trans hcurr hmax
       let initial := mkNR curr.val.lo initialHi hinit
-      let rec loop (current : NR) (pending : List NR) :
-          Prod NR (List NR) :=
-        match pending with
-        | [] => (current, [])
-        | next :: pendingTail =>
-            if decide (next.val.lo <= current.val.hi + 1) then
-              let newLo := current.val.lo
-              let newHi := max current.val.hi next.val.hi
-              have hcurr' : current.val.lo ≤ current.val.hi := current.property
-              have hmax' : current.val.hi ≤ newHi := le_max_left _ _
-              have hmerged : newLo ≤ newHi := le_trans hcurr' hmax'
-              let merged := mkNR newLo newHi hmerged
-              loop merged pendingTail
-            else
-              (current, next :: pendingTail)
-      let result := loop initial tail
+      let result := coalesce initial tail
       before ++ (result.fst :: result.snd)
 
 private def internalAdd2NRs (xs : List NR) (start stop : Int)
@@ -188,6 +189,60 @@ private lemma merge_step_sets
       next.val.lo next.val.hi h₁ h₂ horder htouch
   simpa [IntRange.toSet, mkNR] using h_union
 
+private lemma coalesce_sets
+    (current : NR) (pending : List NR) :
+    listSet ([ (coalesce current pending).fst ] ++
+        (coalesce current pending).snd) =
+      current.val.toSet ∪ listSet pending := by
+  classical
+  revert current
+  induction pending with
+  | nil =>
+      intro current
+      simp [coalesce, listSet_cons, listSet_nil,
+        Set.union_left_comm, Set.union_assoc, Set.union_comm]
+  | cons next tail ih =>
+      intro current
+      by_cases htouch : decide (next.val.lo ≤ current.val.hi + 1)
+      ·
+        have hle : next.val.lo ≤ current.val.hi + 1 :=
+          of_decide_eq_true htouch
+        have horder : current.val.lo ≤ next.val.lo := by
+          -- TODO: derive from invariants (stub for now)
+          sorry
+        have hmerge :
+            current.val.toSet ∪ next.val.toSet =
+              (mkNR current.val.lo (max current.val.hi next.val.hi)
+                (by
+                  have hc : current.val.lo ≤ current.val.hi :=
+                    current.property
+                  have : current.val.hi ≤ max current.val.hi next.val.hi :=
+                    le_max_left _ _
+                  exact le_trans hc this)).val.toSet := by
+          apply merge_step_sets current next horder
+          exact not_lt.mpr hle
+        have := ih (mkNR current.val.lo
+            (max current.val.hi next.val.hi)
+            (by
+              have hc : current.val.lo ≤ current.val.hi :=
+                current.property
+              have : current.val.hi ≤ max current.val.hi next.val.hi :=
+                le_max_left _ _
+              exact le_trans hc this))
+        simp [coalesce, htouch, hmerge,
+          listSet_cons, listSet_append,
+          Set.union_left_comm, Set.union_assoc,
+          Set.union_comm] at this ⊢
+        simpa [Set.union_left_comm, Set.union_assoc,
+          Set.union_comm] using this
+      ·
+        have htouch' : ¬ next.val.lo ≤ current.val.hi + 1 :=
+          of_decide_eq_false htouch
+        simp [coalesce, htouch', listSet_cons,
+          Set.union_left_comm, Set.union_assoc,
+          Set.union_comm]
+
+*** End Patch***
 private lemma deleteExtraNRs_sets_after_splice
     (xs : List NR) (start stop : Int) (h : start ≤ stop) :
     let split := List.span (fun nr => decide (nr.val.lo < start)) xs
@@ -289,3 +344,13 @@ Next plan:
  B) Once that lemma is available, finish `internalAdd2_toSet` by combining the
     splice-union equality with the preserved-result lemma.
 -/
+
+
+
+
+
+
+
+
+
+
