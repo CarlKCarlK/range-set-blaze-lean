@@ -162,6 +162,32 @@ private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
 private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
 
+private lemma chain_head_le_all_tail
+    (y : NR) (ys : List NR)
+    (hchain : List.Chain' loLE (y :: ys)) :
+    ∀ z ∈ ys, y.val.lo ≤ z.val.lo := by
+  revert y
+  induction ys with
+  | nil =>
+      intro y _ z hz
+      cases hz
+  | cons a ys ih =>
+      intro y hchain z hz
+      have h_y_le_a : y.val.lo ≤ a.val.lo := by
+        simpa [loLE] using List.Chain'.rel_head (R := loLE) hchain
+      have htail : List.Chain' loLE (a :: ys) :=
+        List.Chain'.tail hchain
+      have hz_cases : z = a ∨ z ∈ ys := by
+        simpa using hz
+      cases hz_cases with
+      | inl hz_eq =>
+          subst hz_eq
+          exact h_y_le_a
+      | inr hz_mem =>
+          have h_a_le_z : a.val.lo ≤ z.val.lo :=
+            ih _ htail _ hz_mem
+          exact le_trans h_y_le_a h_a_le_z
+
 private lemma span_suffix_all_ge_start_of_chain
     (xs : List NR) (start : Int)
     (hchain : List.Chain' loLE xs) :
@@ -169,7 +195,55 @@ private lemma span_suffix_all_ge_start_of_chain
     let split := List.span p xs
     ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
   classical
-  sorry
+  intro p split
+  have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+  have h_take : split.fst = xs.takeWhile p := by
+    simpa [split] using congrArg Prod.fst h_span
+  have h_drop : split.snd = xs.dropWhile p := by
+    simpa [split] using congrArg Prod.snd h_span
+  have h_decomp : split.fst ++ split.snd = xs := by
+    have := List.takeWhile_append_dropWhile (p := p) (l := xs)
+    simpa [h_take, h_drop]
+  intro nr hmem
+  have hchain_append :
+      List.Chain' loLE (split.fst ++ split.snd) := by
+    simpa [h_decomp] using hchain
+  have hchain_suffix :
+      List.Chain' loLE split.snd :=
+    List.Chain'.right_of_append (l₁ := split.fst)
+      (l₂ := split.snd) hchain_append
+  cases hA : split.snd with
+  | nil =>
+      simpa [hA] using hmem
+  | cons y ys =>
+      have hmem_cons : nr = y ∨ nr ∈ ys := by
+        simpa [hA] using hmem
+      have hy_head? :
+          (xs.dropWhile p).head? = some y := by
+        have : split.snd.head? = some y := by
+          simpa [hA]
+        simpa [h_drop] using this
+      have hy_false : p y = false := by
+        have := List.head?_dropWhile_not (p := p) (l := xs)
+        simpa [hy_head?] using this
+      have hy_not_lt : ¬ y.val.lo < start := by
+        intro hy_lt
+        have : p y = true := by
+          simpa [p, hy_lt]
+        simpa [this] using hy_false
+      have h_start_le_y : start ≤ y.val.lo :=
+        not_lt.mp hy_not_lt
+      have hchain_after : List.Chain' loLE (y :: ys) := by
+        simpa [hA] using hchain_suffix
+      cases hmem_cons with
+      | inl hnr =>
+          subst hnr
+          exact h_start_le_y
+      | inr htail =>
+          have h_y_le_nr :
+              y.val.lo ≤ nr.val.lo :=
+            chain_head_le_all_tail y ys hchain_after nr htail
+          exact le_trans h_start_le_y h_y_le_nr
 
 @[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
     deleteExtraNRs.loop current [] = (current, []) := by
