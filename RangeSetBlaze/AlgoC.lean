@@ -107,6 +107,11 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
           else
             s
 
+lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
+    (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
+  -- TODO(next increment): prove by mirroring Algo B’s union argument.
+  sorry
+
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
   by_cases hempty : r.hi < r.lo
@@ -115,6 +120,27 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
       IntRange.toSet_eq_empty_of_hi_lt_lo hempty
     simp [internalAddC, hempty, hEmptySet, Set.union_comm]
   ·
-    sorry
+    classical
+    have hnonempty : r.lo ≤ r.hi := not_lt.mp hempty
+    generalize hLast :
+        List.getLast?
+          (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) =
+        optPrev
+    cases optPrev with
+    | none =>
+        have hbranch : internalAddC s r = internalAdd2 s r := by
+          simp [internalAddC, hempty, hLast]
+        simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
+          internalAdd2_toSet s r
+    | some prev =>
+        by_cases hgap : prev.val.hi + 1 < r.lo
+        ·
+          have hbranch : internalAddC s r = internalAdd2 s r := by
+            simp [internalAddC, hempty, hLast, hgap]
+          simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
+            internalAdd2_toSet s r
+        ·
+          simp [internalAddC, hempty, hLast, hgap, RangeSetBlaze.toSet_eq_listToSet]
+          sorry
 
 end RangeSetBlaze
