@@ -131,6 +131,34 @@ private def listSet (rs : List NR) : Set Int :=
   | cons x xs ih =>
       simp [ih, Set.union_left_comm, Set.union_assoc, Set.union_comm]
 
+private lemma takeWhile_append_of_all {α : Type _} (p : α → Bool)
+    (l : List α) (x : α) (xs : List α)
+    (hall : ∀ y ∈ l, p y = true) (hx : p x = false) :
+    (l ++ x :: xs).takeWhile p = l := by
+  induction l with
+  | nil =>
+      simp [hx]
+  | cons y ys ih =>
+      have hy : p y = true := hall y (by simp)
+      have hys : ∀ z ∈ ys, p z = true := by
+        intro z hz
+        exact hall z (by simp [hz])
+      simp [hy, ih hys]
+
+private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
+    (l : List α) (x : α) (xs : List α)
+    (hall : ∀ y ∈ l, p y = true) (hx : p x = false) :
+    (l ++ x :: xs).dropWhile p = x :: xs := by
+  induction l with
+  | nil =>
+      simp [hx]
+  | cons y ys ih =>
+      have hy : p y = true := hall y (by simp)
+      have hys : ∀ z ∈ ys, p z = true := by
+        intro z hz
+        exact hall z (by simp [hz])
+      simp [hy, ih hys]
+
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
 private lemma union_touch_eq_Icc_max
