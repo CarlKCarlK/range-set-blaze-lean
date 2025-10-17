@@ -166,4 +166,89 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             internalAddC_extendPrev_toSet s r prev
               hnonempty hLast (by exact hgap) h_extend
 
+open Classical
+open IntRange
+
+/-- Pack endpoints as a nonempty range. -/
+private def mkNR' (lo hi : Int) (h : lo ≤ hi) : NR :=
+  ⟨{ lo := lo, hi := hi }, h⟩
+
+/-- Local list-based view of the union of ranges. -/
+private def listSet (rs : List NR) : Set Int :=
+  rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
+
+@[simp] private lemma listSet_cons (r : NR) (rs : List NR) :
+    listSet (r :: rs) = r.val.toSet ∪ listSet rs := rfl
+
+/-- If two ordered ranges touch or overlap, their union equals the single
+closed interval that stretches to the larger upper end. -/
+private lemma union_touch_eq_Icc_max
+    (lo₁ hi₁ lo₂ hi₂ : Int)
+    (h₁ : lo₁ ≤ hi₁) (h₂ : lo₂ ≤ hi₂)
+    (h_order : lo₁ ≤ lo₂)
+    (h_touch : ¬ (hi₁ + 1 < lo₂)) :
+    Set.Icc lo₁ hi₁ ∪ Set.Icc lo₂ hi₂ =
+      Set.Icc lo₁ (max hi₁ hi₂) := by
+  classical
+  apply Set.ext
+  intro x
+  constructor
+  · intro hx
+    have _ := h₁
+    have _ := h₂
+    rcases hx with hx₁ | hx₂
+    · rcases hx₁ with ⟨hx_lo, hx_hi⟩
+      exact ⟨hx_lo, le_trans hx_hi (le_max_left _ _)⟩
+    · rcases hx₂ with ⟨hx_lo, hx_hi⟩
+      have hx_lo' : lo₁ ≤ x := le_trans h_order hx_lo
+      have hx_hi' : x ≤ max hi₁ hi₂ := le_trans hx_hi (le_max_right _ _)
+      exact ⟨hx_lo', hx_hi'⟩
+  · intro hx
+    rcases hx with ⟨hx_lo, hx_hi⟩
+    by_cases hx_le : x ≤ hi₁
+    · left
+      exact ⟨hx_lo, hx_le⟩
+    · have hx_gt : hi₁ < x := lt_of_not_ge hx_le
+      have hx_add : hi₁ + 1 ≤ x := (Int.add_one_le_iff).2 hx_gt
+      have h_lo₂ : lo₂ ≤ x := le_trans (le_of_not_gt h_touch) hx_add
+      have hx_le_hi₂ : x ≤ hi₂ := by
+        have h_or := (le_max_iff).1 hx_hi
+        exact h_or.resolve_left hx_le
+      right
+      exact ⟨h_lo₂, hx_le_hi₂⟩
+
+/-- Set-level description of a single merge step inside `deleteExtraNRs`. -/
+private lemma merge_step_sets
+    (current next : NR)
+    (horder : current.val.lo ≤ next.val.lo)
+    (htouch : ¬ (current.val.hi + 1 < next.val.lo)) :
+    current.val.toSet ∪ next.val.toSet =
+      (mkNR current.val.lo (max current.val.hi next.val.hi)
+        (by
+          have hc : current.val.lo ≤ current.val.hi := current.property
+          have : current.val.hi ≤ max current.val.hi next.val.hi :=
+            le_max_left _ _
+          exact le_trans hc this)).val.toSet := by
+  classical
+  have h₁ : current.val.lo ≤ current.val.hi := current.property
+  have h₂ : next.val.lo ≤ next.val.hi := next.property
+  have h_union :=
+    union_touch_eq_Icc_max current.val.lo current.val.hi
+      next.val.lo next.val.hi h₁ h₂ horder htouch
+  simpa [IntRange.toSet, mkNR] using h_union
+
 end RangeSetBlaze
+
+/-
+Blockers:
+ 1) Proving `internalAdd2_toSet` requires showing that `deleteExtraNRs` preserves
+    the set union after merging overlapping ranges; exposing its internal `loop`
+    recursion and establishing the interval-union lemmas became non-trivial within
+    the allowed time.
+Next plan:
+ A) Introduce a dedicated lemma describing the union preserved by `deleteExtraNRs`
+    by structurally recursing over its pending list and reusing the existing
+    `IntRange` interval lemmas from `Basic`.
+ B) Once that lemma is available, finish `internalAdd2_toSet` by combining the
+    splice-union equality with the preserved-result lemma.
+-/
