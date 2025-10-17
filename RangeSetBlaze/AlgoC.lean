@@ -107,65 +107,6 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
           else
             s
 
-lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
-    (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
-  -- TODO(next increment): prove by mirroring Algo B’s union argument.
-  sorry
-
-/-- Spec for the “extend previous” branch of `internalAddC`.
-Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
-and `prev.hi < r.hi` so we actually extend. -/
-lemma internalAddC_extendPrev_toSet
-    (s : RangeSetBlaze) (r : IntRange)
-    (prev : NR)
-    (h_nonempty : r.lo ≤ r.hi)
-    (h_last :
-      List.getLast?
-        (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
-      = some prev)
-    (h_gap : ¬ prev.val.hi + 1 < r.lo)
-    (h_extend : prev.val.hi < r.hi) :
-    (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
-  -- TODO(next increment): prove by unfolding the branch into
-  -- `fromNRsUnsafe` + `delete_extra` and reusing union facts.
-  sorry
-
-theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
-    (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
-  by_cases hempty : r.hi < r.lo
-  ·
-    have hEmptySet : r.toSet = (∅ : Set Int) :=
-      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
-    simp [internalAddC, hempty, hEmptySet, Set.union_comm]
-  ·
-    classical
-    have hnonempty : r.lo ≤ r.hi := not_lt.mp hempty
-    generalize hLast :
-        List.getLast?
-          (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) =
-        optPrev
-    cases optPrev with
-    | none =>
-        have hbranch : internalAddC s r = internalAdd2 s r := by
-          simp [internalAddC, hempty, hLast]
-        simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
-          internalAdd2_toSet s r
-    | some prev =>
-        by_cases hgap : prev.val.hi + 1 < r.lo
-        ·
-          have hbranch : internalAddC s r = internalAdd2 s r := by
-            simp [internalAddC, hempty, hLast, hgap]
-          simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
-            internalAdd2_toSet s r
-        ·
-          -- Remaining branch: no gap and we truly extend `prev`.
-          have h_extend : prev.val.hi < r.hi := by
-            -- placeholder derived from the branch guard of `internalAddC`
-            sorry
-          exact
-            internalAddC_extendPrev_toSet s r prev
-              hnonempty hLast (by exact hgap) h_extend
-
 open Classical
 open IntRange
 
@@ -177,8 +118,18 @@ private def mkNR' (lo hi : Int) (h : lo ≤ hi) : NR :=
 private def listSet (rs : List NR) : Set Int :=
   rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
 
+@[simp] private lemma listSet_nil :
+    listSet ([] : List NR) = (∅ : Set Int) := rfl
+
 @[simp] private lemma listSet_cons (r : NR) (rs : List NR) :
     listSet (r :: rs) = r.val.toSet ∪ listSet rs := rfl
+
+@[simp] private lemma listSet_append (xs ys : List NR) :
+    listSet (xs ++ ys) = listSet xs ∪ listSet ys := by
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+      simp [ih, Set.union_left_comm, Set.union_assoc, Set.union_comm]
 
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
@@ -236,6 +187,92 @@ private lemma merge_step_sets
     union_touch_eq_Icc_max current.val.lo current.val.hi
       next.val.lo next.val.hi h₁ h₂ horder htouch
   simpa [IntRange.toSet, mkNR] using h_union
+
+private lemma deleteExtraNRs_sets_after_splice
+    (xs : List NR) (start stop : Int) (h : start ≤ stop) :
+    let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+    let before := split.fst
+    let after := split.snd
+    let inserted := mkNR start stop h
+    listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+      listSet before ∪ inserted.val.toSet ∪ listSet after := by
+  classical
+  sorry
+
+lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
+    (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
+  classical
+  unfold internalAdd2
+  by_cases hempty : r.hi < r.lo
+  ·
+    have hEmpty : r.toSet = (∅ : Set Int) :=
+      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
+    simp [hempty, hEmpty, Set.union_comm]
+  ·
+    have hle : r.lo ≤ r.hi := not_lt.mp hempty
+    simp [hempty, hle, RangeSetBlaze.toSet_eq_listToSet,
+      internalAdd2NRs]
+    have :=
+      deleteExtraNRs_sets_after_splice s.ranges r.lo r.hi hle
+    -- TODO: finish rewriting the result of `deleteExtraNRs` into the desired union.
+    sorry
+
+/-– Spec for the “extend previous” branch of `internalAddC`.
+Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
+and `prev.hi < r.hi` so we actually extend. -/
+lemma internalAddC_extendPrev_toSet
+    (s : RangeSetBlaze) (r : IntRange)
+    (prev : NR)
+    (h_nonempty : r.lo ≤ r.hi)
+    (h_last :
+      List.getLast?
+        (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+      = some prev)
+    (h_gap : ¬ prev.val.hi + 1 < r.lo)
+    (h_extend : prev.val.hi < r.hi) :
+    (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
+  -- TODO(next increment): prove by unfolding the branch into
+  -- `fromNRsUnsafe` + `delete_extra` and reusing union facts.
+  sorry
+
+theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
+    (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
+  by_cases hempty : r.hi < r.lo
+  ·
+    have hEmptySet : r.toSet = (∅ : Set Int) :=
+      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
+    simp [internalAddC, hempty, hEmptySet, Set.union_comm]
+  ·
+    classical
+    have hnonempty : r.lo ≤ r.hi := not_lt.mp hempty
+    generalize hLast :
+        List.getLast?
+          (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) =
+        optPrev
+    cases optPrev with
+    | none =>
+        have hbranch : internalAddC s r = internalAdd2 s r := by
+          simp [internalAddC, hempty, hLast]
+        simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
+          internalAdd2_toSet s r
+    | some prev =>
+        by_cases hgap : prev.val.hi + 1 < r.lo
+        ·
+          have hbranch : internalAddC s r = internalAdd2 s r := by
+            simp [internalAddC, hempty, hLast, hgap]
+          simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
+            internalAdd2_toSet s r
+        ·
+          -- Remaining branch: no gap and we truly extend `prev`.
+          have h_extend : prev.val.hi < r.hi := by
+            -- placeholder derived from the branch guard of `internalAddC`
+            sorry
+          exact
+            internalAddC_extendPrev_toSet s r prev
+              hnonempty hLast (by exact hgap) h_extend
+
+open Classical
+open IntRange
 
 end RangeSetBlaze
 
