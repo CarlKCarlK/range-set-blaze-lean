@@ -112,6 +112,24 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
   -- TODO(next increment): prove by mirroring Algo B’s union argument.
   sorry
 
+/-- Spec for the “extend previous” branch of `internalAddC`.
+Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
+and `prev.hi < r.hi` so we actually extend. -/
+lemma internalAddC_extendPrev_toSet
+    (s : RangeSetBlaze) (r : IntRange)
+    (prev : NR)
+    (h_nonempty : r.lo ≤ r.hi)
+    (h_last :
+      List.getLast?
+        (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+      = some prev)
+    (h_gap : ¬ prev.val.hi + 1 < r.lo)
+    (h_extend : prev.val.hi < r.hi) :
+    (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
+  -- TODO(next increment): prove by unfolding the branch into
+  -- `fromNRsUnsafe` + `delete_extra` and reusing union facts.
+  sorry
+
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
   by_cases hempty : r.hi < r.lo
@@ -140,7 +158,12 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
             internalAdd2_toSet s r
         ·
-          simp [internalAddC, hempty, hLast, hgap, RangeSetBlaze.toSet_eq_listToSet]
-          sorry
+          -- Remaining branch: no gap and we truly extend `prev`.
+          have h_extend : prev.val.hi < r.hi := by
+            -- placeholder derived from the branch guard of `internalAddC`
+            sorry
+          exact
+            internalAddC_extendPrev_toSet s r prev
+              hnonempty hLast (by exact hgap) h_extend
 
 end RangeSetBlaze
