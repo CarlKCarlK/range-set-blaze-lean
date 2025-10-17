@@ -109,6 +109,12 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
 
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
-  sorry
+  by_cases hempty : r.hi < r.lo
+  ·
+    have hEmptySet : r.toSet = (∅ : Set Int) :=
+      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
+    simp [internalAddC, hempty, hEmptySet, Set.union_comm]
+  ·
+    sorry
 
 end RangeSetBlaze
