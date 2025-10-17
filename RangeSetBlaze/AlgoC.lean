@@ -16,6 +16,9 @@ module builds while proofs are filled in later.
 private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
+private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
+  ⟨{ lo := lo, hi := hi }, h⟩
+
 private def fromNRsUnsafe (xs : List NR) : RangeSetBlaze :=
   { ranges := xs, ok := by sorry }
 
@@ -28,7 +31,10 @@ private def deleteExtraNRs (xs : List NR) (start stop : Int) :
   | [] => xs
   | curr :: tail =>
       let initialHi := max curr.val.hi stop
-      let initial := mkNRUnsafe curr.val.lo initialHi
+      have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+      have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
+      have hinit : curr.val.lo ≤ initialHi := le_trans hcurr hmax
+      let initial := mkNR curr.val.lo initialHi hinit
       let rec loop (current : NR) (pending : List NR) :
           Prod NR (List NR) :=
         match pending with
@@ -37,19 +43,23 @@ private def deleteExtraNRs (xs : List NR) (start stop : Int) :
             if decide (next.val.lo <= current.val.hi + 1) then
               let newLo := current.val.lo
               let newHi := max current.val.hi next.val.hi
-              let merged := mkNRUnsafe newLo newHi
+              have hcurr' : current.val.lo ≤ current.val.hi := current.property
+              have hmax' : current.val.hi ≤ newHi := le_max_left _ _
+              have hmerged : newLo ≤ newHi := le_trans hcurr' hmax'
+              let merged := mkNR newLo newHi hmerged
               loop merged pendingTail
             else
               (current, next :: pendingTail)
       let result := loop initial tail
       before ++ (result.fst :: result.snd)
 
-private def internalAdd2NRs (xs : List NR) (start stop : Int) :
+private def internalAdd2NRs (xs : List NR) (start stop : Int)
+    (h : start ≤ stop) :
     List NR :=
   let split := List.span (fun nr => decide (nr.val.lo < start)) xs
   let before := split.fst
   let after := split.snd
-  let inserted := mkNRUnsafe start stop
+  let inserted := mkNR start stop h
   deleteExtraNRs (before ++ (inserted :: after)) start stop
 
 def delete_extra (s : RangeSetBlaze) (internalRange : IntRange) :
@@ -62,7 +72,11 @@ def internalAdd2 (s : RangeSetBlaze) (internalRange : IntRange) :
     RangeSetBlaze :=
   let start := internalRange.lo
   let stop := internalRange.hi
-  fromNRsUnsafe (internalAdd2NRs s.ranges start stop)
+  if h : stop < start then
+    s
+  else
+    let hle : start ≤ stop := not_lt.mp h
+    fromNRsUnsafe (internalAdd2NRs s.ranges start stop hle)
 
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
@@ -80,14 +94,18 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
     | some prev =>
         if decide (prev.val.hi + 1 < start) then
           internalAdd2 s r
-        else if decide (prev.val.hi < stop) then
-          let extendedList :=
-            List.dropLast before ++ (mkNRUnsafe prev.val.lo stop :: after)
-          let mergedSet := fromNRsUnsafe extendedList
-          let target : IntRange := { lo := prev.val.lo, hi := stop }
-          delete_extra mergedSet target
         else
-          s
+          if h_lt : prev.val.hi < stop then
+            have h_nonempty : prev.val.lo ≤ prev.val.hi := prev.property
+            have h_le : prev.val.hi ≤ stop := le_of_lt h_lt
+            have hle : prev.val.lo ≤ stop := le_trans h_nonempty h_le
+            let extendedList :=
+              List.dropLast before ++ (mkNR prev.val.lo stop hle :: after)
+            let mergedSet := fromNRsUnsafe extendedList
+            let target : IntRange := { lo := prev.val.lo, hi := stop }
+            delete_extra mergedSet target
+          else
+            s
 
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
