@@ -504,27 +504,26 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 
   -- Unfold deleteExtraNRs on the spliced list
   unfold deleteExtraNRs
-  -- Completing this proof requires carefully handling the match expression
-  -- and showing that the initial range created from max curr.hi stop
-  -- properly encompasses both inserted and curr when they need to merge.
+  
+  -- After rewriting with h_span_splice, the match will bind curr = inserted, tail = after
+  -- Then an initial range is created: mkNR inserted.lo (max inserted.hi stop)  
+  -- The loop is called on this initial and after
+  -- We need to show the result equals listSet before ∪ inserted.toSet ∪ listSet after
+  
+  -- Key facts we have:
+  -- 1. h_span_splice tells us span on the spliced list gives (before, inserted :: after)
+  -- 2. h_loop (deleteExtraNRs_loop_sets) gives us the correctness of the loop
+  -- 3. The initial range covers [start, stop] which equals inserted.toSet
+  
   sorry
+
+-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
+private lemma listSet_eq_listToSet (rs : List NR) :
+    listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
-  classical
-  unfold internalAdd2
-  by_cases hempty : r.hi < r.lo
-  ·
-    have hEmpty : r.toSet = (∅ : Set Int) :=
-      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
-    simp [hempty, hEmpty, Set.union_comm]
-  ·
-    have hle : r.lo ≤ r.hi := not_lt.mp hempty
-    -- Extract the chain invariant from s.ok
-    have hchain : List.Chain' loLE s.ranges :=
-      pairwise_before_implies_chain_loLE s.ranges s.ok
-    -- The sorry lemma was removed, use the completed proof via the _of_chain version
-    sorry/-– Spec for the “extend previous” branch of `internalAddC`.
+  sorry/-– Spec for the “extend previous” branch of `internalAddC`.
 Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
 and `prev.hi < r.hi` so we actually extend. -/
 lemma internalAddC_extendPrev_toSet
