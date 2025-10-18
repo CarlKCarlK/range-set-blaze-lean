@@ -584,6 +584,3 @@ Next plan:
  B) Once that lemma is available, finish `internalAdd2_toSet` by combining the
     splice-union equality with the preserved-result lemma.
 -/
-
-
-
