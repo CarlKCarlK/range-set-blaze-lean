@@ -278,6 +278,19 @@ private lemma mem_takeWhile_satisfies {α : Type _} (p : α → Bool) (xs : List
           | inl heq => subst heq; exact hpy
           | inr htail => exact ih htail
 
+private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
+    nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
+  | [], _, h => by cases h
+  | x :: xs, nr, h => by
+      simp [List.mem_cons] at h
+      rw [listSet_cons]
+      cases h with
+      | inl heq =>
+          subst heq
+          exact Set.subset_union_left
+      | inr htail =>
+          exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_listSet xs nr htail) _
+
 private lemma chain_head_le_all_tail
     (y : NR) (ys : List NR)
     (hchain : List.Chain' loLE (y :: ys)) :
@@ -651,8 +664,27 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
 
               -- And prev.val.toSet ⊆ s.toSet because prev ∈ s.ranges
               have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
-                -- prev is in s.ranges, so its toSet is part of s.toSet
-                sorry
+                -- prev is in s.ranges (from takeWhile)
+                let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
+                have h_tw_nonempty : tw ≠ [] := by
+                  intro h_empty
+                  have : tw.getLast? = none := by simp [h_empty]
+                  rw [this] at hLast
+                  cases hLast
+                have h_prev_mem_tw : prev ∈ tw := by
+                  have h_last : tw.getLast h_tw_nonempty = prev := by
+                    have := List.getLast?_eq_getLast h_tw_nonempty
+                    rw [this] at hLast
+                    cases hLast
+                    rfl
+                  rw [← h_last]
+                  exact List.getLast_mem h_tw_nonempty
+                have h_prev_mem_ranges : prev ∈ s.ranges := by
+                  apply List.takeWhile_subset
+                  exact h_prev_mem_tw
+                have h_listSet := nr_mem_ranges_subset_listSet s.ranges prev h_prev_mem_ranges
+                rw [RangeSetBlaze.toSet_eq_listToSet]
+                convert h_listSet
 
               exact Set.Subset.trans h_r_subset_prev h_prev_in_s
 
