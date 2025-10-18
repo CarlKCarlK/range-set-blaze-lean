@@ -613,7 +613,30 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             -- Need to show s.toSet = s.toSet ∪ r.toSet
             -- When ¬hgap and ¬h_extend, internalAddC returns s
             have hbranch : internalAddC s r = s := by
-              sorry  -- Follows from unfolding internalAddC with the conditions
+              unfold internalAddC
+              -- Simplify the outer if: r.hi < r.lo is false
+              simp only [hempty, ite_false]
+              -- Now we're in the else branch
+              -- We need to relate the span result to hLast
+              -- Note: internalAddC uses span with (nr.lo ≤ start = r.lo)
+              -- but hLast uses takeWhile with the same predicate
+              have h_before_getLast :
+                (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst.getLast? = some prev := by
+                have h_span := List.span_eq_takeWhile_dropWhile
+                  (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+                have : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst =
+                       s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+                  exact congrArg Prod.fst h_span
+                rw [this]
+                exact hLast
+              simp only [h_before_getLast]
+              -- Now the gap check
+              have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
+                simp [hgap]
+              simp only [h_gap_decide]
+              -- After simplifying, we need to show that the else branch is taken
+              -- because ¬h_extend means the condition is false
+              simp [h_extend]
             rw [hbranch]
 
             -- Show that r.toSet ⊆ s.toSet
