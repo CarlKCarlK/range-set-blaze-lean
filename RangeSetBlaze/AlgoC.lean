@@ -22,6 +22,82 @@ private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
 private def fromNRsUnsafe (xs : List NR) : RangeSetBlaze :=
   { ranges := xs, ok := by sorry }
 
+-- NEW: top-level version of the previous nested `loop`
+private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (List NR) :=
+  match pending with
+  | [] => (current, [])
+  | next :: pendingTail =>
+      if decide (next.val.lo ≤ current.val.hi + 1) then
+        let newLo := current.val.lo
+        let newHi := max current.val.hi next.val.hi
+        have hcurr' : current.val.lo ≤ current.val.hi := current.property
+        have hmax'  : current.val.hi ≤ newHi := le_max_left _ _
+        have hmerged : newLo ≤ newHi := le_trans hcurr' hmax'
+        let merged := mkNR newLo newHi hmerged
+        deleteExtraNRs_loop merged pendingTail
+      else
+        (current, next :: pendingTail)
+
+@[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
+    deleteExtraNRs_loop current [] = (current, []) := rfl
+
+/-- If two ordered ranges touch or overlap, their union equals the single
+closed interval that stretches to the larger upper end. -/
+private lemma union_touch_eq_Icc_max
+    (lo₁ hi₁ lo₂ hi₂ : Int)
+    (h₁ : lo₁ ≤ hi₁) (h₂ : lo₂ ≤ hi₂)
+    (h_order : lo₁ ≤ lo₂)
+    (h_touch : ¬ (hi₁ + 1 < lo₂)) :
+    Set.Icc lo₁ hi₁ ∪ Set.Icc lo₂ hi₂ =
+      Set.Icc lo₁ (max hi₁ hi₂) := by
+  classical
+  apply Set.ext
+  intro x
+  constructor
+  · intro hx
+    have _ := h₁
+    have _ := h₂
+    rcases hx with hx₁ | hx₂
+    · rcases hx₁ with ⟨hx_lo, hx_hi⟩
+      exact ⟨hx_lo, le_trans hx_hi (le_max_left _ _)⟩
+    · rcases hx₂ with ⟨hx_lo, hx_hi⟩
+      have hx_lo' : lo₁ ≤ x := le_trans h_order hx_lo
+      have hx_hi' : x ≤ max hi₁ hi₂ := le_trans hx_hi (le_max_right _ _)
+      exact ⟨hx_lo', hx_hi'⟩
+  · intro hx
+    rcases hx with ⟨hx_lo, hx_hi⟩
+    by_cases hx_le : x ≤ hi₁
+    · left
+      exact ⟨hx_lo, hx_le⟩
+    · have hx_gt : hi₁ < x := lt_of_not_ge hx_le
+      have hx_add : hi₁ + 1 ≤ x := (Int.add_one_le_iff).2 hx_gt
+      have h_lo₂ : lo₂ ≤ x := le_trans (le_of_not_gt h_touch) hx_add
+      have hx_le_hi₂ : x ≤ hi₂ := by
+        have h_or := (le_max_iff).1 hx_hi
+        exact h_or.resolve_left hx_le
+      right
+      exact ⟨h_lo₂, hx_le_hi₂⟩
+
+/-- Set-level description of a single merge step inside `deleteExtraNRs`. -/
+private lemma merge_step_sets
+    (current next : NR)
+    (horder : current.val.lo ≤ next.val.lo)
+    (htouch : ¬ (current.val.hi + 1 < next.val.lo)) :
+    current.val.toSet ∪ next.val.toSet =
+      (mkNR current.val.lo (max current.val.hi next.val.hi)
+        (by
+          have hc : current.val.lo ≤ current.val.hi := current.property
+          have : current.val.hi ≤ max current.val.hi next.val.hi :=
+            le_max_left _ _
+          exact le_trans hc this)).val.toSet := by
+  classical
+  have h₁ : current.val.lo ≤ current.val.hi := current.property
+  have h₂ : next.val.lo ≤ next.val.hi := next.property
+  have h_union :=
+    union_touch_eq_Icc_max current.val.lo current.val.hi
+      next.val.lo next.val.hi h₁ h₂ horder htouch
+  simpa [IntRange.toSet, mkNR] using h_union
+
 private def deleteExtraNRs (xs : List NR) (start stop : Int) :
     List NR :=
   let split := List.span (fun nr => decide (nr.val.lo < start)) xs
@@ -35,22 +111,7 @@ private def deleteExtraNRs (xs : List NR) (start stop : Int) :
       have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
       have hinit : curr.val.lo ≤ initialHi := le_trans hcurr hmax
       let initial := mkNR curr.val.lo initialHi hinit
-      let rec loop (current : NR) (pending : List NR) :
-          Prod NR (List NR) :=
-        match pending with
-        | [] => (current, [])
-        | next :: pendingTail =>
-            if decide (next.val.lo <= current.val.hi + 1) then
-              let newLo := current.val.lo
-              let newHi := max current.val.hi next.val.hi
-              have hcurr' : current.val.lo ≤ current.val.hi := current.property
-              have hmax' : current.val.hi ≤ newHi := le_max_left _ _
-              have hmerged : newLo ≤ newHi := le_trans hcurr' hmax'
-              let merged := mkNR newLo newHi hmerged
-              loop merged pendingTail
-            else
-              (current, next :: pendingTail)
-      let result := loop initial tail
+      let result := deleteExtraNRs_loop initial tail
       before ++ (result.fst :: result.snd)
 
 private def internalAdd2NRs (xs : List NR) (start stop : Int)
@@ -246,10 +307,6 @@ private lemma span_suffix_all_ge_start_of_chain
             chain_head_le_all_tail y ys hchain_after nr htail
           exact le_trans h_start_le_y h_y_le_nr
 
-@[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
-    deleteExtraNRs.loop current [] = (current, []) := by
-  simp [deleteExtraNRs.loop]
-
 /-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
 lemma deleteExtraNRs_loop_sets
     (start : Int) :
@@ -257,68 +314,66 @@ lemma deleteExtraNRs_loop_sets
       current.val.lo = start →
       (∀ nr ∈ pending, start ≤ nr.val.lo) →
       listSet
-          (let res := deleteExtraNRs.loop current pending;
+          (let res := deleteExtraNRs_loop current pending;
             res.fst :: res.snd)
         =
           current.val.toSet ∪ listSet pending := by
-  intro pending
-  revert current
-  induction pending with
+  intro pending current hcurlo hpend
+  induction pending generalizing current with
   | nil =>
-      intro current hcurlo hpend
-      simp [deleteExtraNRs.loop, listSet_cons, listSet_nil, Set.union_comm]
+      simp [deleteExtraNRs_loop, listSet_cons, listSet_nil, Set.union_comm]
   | cons next tail ih =>
-      intro current hcurlo hpend
-      dsimp [deleteExtraNRs.loop]
-      cases hmerge_dec : decide (next.val.lo ≤ current.val.hi + 1) with
-      | false =>
-          have hmerge : ¬ next.val.lo ≤ current.val.hi + 1 :=
-            of_decide_false hmerge_dec
-          simp [hmerge_dec, hmerge, listSet_cons, Set.union_left_comm,
-            Set.union_assoc]
-      | true =>
-          have hmerge : next.val.lo ≤ current.val.hi + 1 :=
-            of_decide_true hmerge_dec
-          have horder : current.val.lo ≤ next.val.lo := by
-            have : start ≤ next.val.lo := hpend next (by simp)
-            simpa [hcurlo] using this
-          have htouch : ¬ (current.val.hi + 1 < next.val.lo) :=
-            not_lt.mpr hmerge
-          have hpend' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
-            intro nr hmem
-            exact hpend nr (by simp [hmem])
-          set merged :=
-            mkNR current.val.lo (max current.val.hi next.val.hi)
-              (by
-                have hc : current.val.lo ≤ current.val.hi := current.property
-                exact le_trans hc (le_max_left _ _)) with hmerged_def
-          have hcurlo' : merged.val.lo = start := by
-            simpa [hmerged_def, mkNR, hcurlo]
-          have hrec :=
-            ih tail merged hcurlo' hpend'
-          have hmerged_toSet :
-              merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
-            simpa [hmerged_def] using
-              (merge_step_sets current next horder htouch).symm
-          have hloop_simplified :
-              listSet
-                  ((deleteExtraNRs.loop current (next :: tail)).fst ::
-                    (deleteExtraNRs.loop current (next :: tail)).snd)
-                =
-                  merged.val.toSet ∪ listSet tail := by
-            -- now simp can unfold the merge branch and rewrite to `loop merged tail`
-            simpa [hmerge_dec, hmerged_def] using hrec
-          calc
+      dsimp [deleteExtraNRs_loop]
+      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
+      · -- merge branch
+        have horder : current.val.lo ≤ next.val.lo := by
+          have : start ≤ next.val.lo := hpend next (by simp)
+          simpa [hcurlo] using this
+        have htouch : ¬ (current.val.hi + 1 < next.val.lo) :=
+          not_lt.mpr hmerge
+        have hpend' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
+          intro nr hmem
+          exact hpend nr (by simp [hmem])
+        set merged :=
+          mkNR current.val.lo (max current.val.hi next.val.hi)
+            (by
+              have hc : current.val.lo ≤ current.val.hi := current.property
+              exact le_trans hc (le_max_left _ _)) with hmerged_def
+        have hcurlo' : merged.val.lo = start := by
+          simpa [hmerged_def, mkNR, hcurlo]
+        have hrec :=
+          ih merged hcurlo' hpend'
+        have hmerged_toSet :
+            merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
+          simpa [hmerged_def] using
+            (merge_step_sets current next horder htouch).symm
+        have hloop_simplified :
             listSet
-                (let res := deleteExtraNRs.loop current (next :: tail);
-                  res.fst :: res.snd)
-                =
-                  merged.val.toSet ∪ listSet tail := hloop_simplified
-            _ = (current.val.toSet ∪ next.val.toSet) ∪ listSet tail := by
-                  simp [hmerged_toSet]
-            _ = current.val.toSet ∪ listSet (next :: tail) := by
-                  simp [listSet_cons, Set.union_left_comm, Set.union_assoc,
-                    Set.union_comm]
+                ((deleteExtraNRs_loop current (next :: tail)).fst ::
+                  (deleteExtraNRs_loop current (next :: tail)).snd)
+              =
+                merged.val.toSet ∪ listSet tail := by
+          -- now simp can unfold the merge branch and rewrite to `loop merged tail`
+          simpa [hmerge, hmerged_def] using hrec
+        calc
+          listSet
+              (let res := deleteExtraNRs_loop current (next :: tail);
+                res.fst :: res.snd)
+              =
+                merged.val.toSet ∪ listSet tail := hloop_simplified
+          _ = (current.val.toSet ∪ next.val.toSet) ∪ listSet tail := by
+                simp [hmerged_toSet]
+          _ = current.val.toSet ∪ listSet (next :: tail) := by
+                simp [listSet_cons, Set.union_left_comm, Set.union_assoc,
+                  Set.union_comm]
+      · -- no-merge branch
+        have hmerge' : ¬ next.val.lo ≤ current.val.hi + 1 := hmerge
+        have hloop_eq :
+            deleteExtraNRs_loop current (next :: tail)
+              = (current, next :: tail) := by
+          simp [deleteExtraNRs_loop, hmerge, hmerge']
+        simp [hmerge, hmerge', hloop_eq, listSet_cons, Set.union_left_comm,
+          Set.union_assoc]
 
 private lemma deleteExtraNRs_sets_after_splice_of_chain
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
@@ -416,7 +471,7 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 
   have hloop_sets :
       listSet
-        (let res := deleteExtraNRs.loop inserted after;
+        (let res := deleteExtraNRs_loop inserted after;
           res.fst :: res.snd)
         = inserted.val.toSet ∪ listSet after := by
     simpa using
@@ -428,62 +483,6 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   simp [hsplit, hbefore, hafter, hinserted, h_initial_eq, hloop_sets,
         listSet_append, listSet_cons, Set.union_left_comm, Set.union_comm]
 
-/-- If two ordered ranges touch or overlap, their union equals the single
-closed interval that stretches to the larger upper end. -/
-private lemma union_touch_eq_Icc_max
-    (lo₁ hi₁ lo₂ hi₂ : Int)
-    (h₁ : lo₁ ≤ hi₁) (h₂ : lo₂ ≤ hi₂)
-    (h_order : lo₁ ≤ lo₂)
-    (h_touch : ¬ (hi₁ + 1 < lo₂)) :
-    Set.Icc lo₁ hi₁ ∪ Set.Icc lo₂ hi₂ =
-      Set.Icc lo₁ (max hi₁ hi₂) := by
-  classical
-  apply Set.ext
-  intro x
-  constructor
-  · intro hx
-    have _ := h₁
-    have _ := h₂
-    rcases hx with hx₁ | hx₂
-    · rcases hx₁ with ⟨hx_lo, hx_hi⟩
-      exact ⟨hx_lo, le_trans hx_hi (le_max_left _ _)⟩
-    · rcases hx₂ with ⟨hx_lo, hx_hi⟩
-      have hx_lo' : lo₁ ≤ x := le_trans h_order hx_lo
-      have hx_hi' : x ≤ max hi₁ hi₂ := le_trans hx_hi (le_max_right _ _)
-      exact ⟨hx_lo', hx_hi'⟩
-  · intro hx
-    rcases hx with ⟨hx_lo, hx_hi⟩
-    by_cases hx_le : x ≤ hi₁
-    · left
-      exact ⟨hx_lo, hx_le⟩
-    · have hx_gt : hi₁ < x := lt_of_not_ge hx_le
-      have hx_add : hi₁ + 1 ≤ x := (Int.add_one_le_iff).2 hx_gt
-      have h_lo₂ : lo₂ ≤ x := le_trans (le_of_not_gt h_touch) hx_add
-      have hx_le_hi₂ : x ≤ hi₂ := by
-        have h_or := (le_max_iff).1 hx_hi
-        exact h_or.resolve_left hx_le
-      right
-      exact ⟨h_lo₂, hx_le_hi₂⟩
-
-/-- Set-level description of a single merge step inside `deleteExtraNRs`. -/
-private lemma merge_step_sets
-    (current next : NR)
-    (horder : current.val.lo ≤ next.val.lo)
-    (htouch : ¬ (current.val.hi + 1 < next.val.lo)) :
-    current.val.toSet ∪ next.val.toSet =
-      (mkNR current.val.lo (max current.val.hi next.val.hi)
-        (by
-          have hc : current.val.lo ≤ current.val.hi := current.property
-          have : current.val.hi ≤ max current.val.hi next.val.hi :=
-            le_max_left _ _
-          exact le_trans hc this)).val.toSet := by
-  classical
-  have h₁ : current.val.lo ≤ current.val.hi := current.property
-  have h₂ : next.val.lo ≤ next.val.hi := next.property
-  have h_union :=
-    union_touch_eq_Icc_max current.val.lo current.val.hi
-      next.val.lo next.val.hi h₁ h₂ horder htouch
-  simpa [IntRange.toSet, mkNR] using h_union
 private lemma deleteExtraNRs_sets_after_splice
     (xs : List NR) (start stop : Int) (h : start ≤ stop) :
     let split := List.span (fun nr => decide (nr.val.lo < start)) xs
