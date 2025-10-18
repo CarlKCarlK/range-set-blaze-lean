@@ -528,21 +528,52 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     have hmem_split : nr ∈ split.snd := by simpa [hafter] using hmem
     exact h_suffix nr hmem_split
 
-  -- Unfold deleteExtraNRs and apply the loop lemma
-  --
-  -- The challenge: After unfolding deleteExtraNRs, we get a match expression that Lean
-  -- doesn't automatically reduce even though we have h_span_splice showing the span result.
-  -- The match will bind curr = inserted, tail = after, create
-  -- initial = mkNR inserted.lo (max inserted.hi stop), and return
-  -- before ++ (deleteExtraNRs_loop initial after).fst :: (deleteExtraNRs_loop initial after).snd
-  --
-  -- We have all the necessary facts:
-  -- - h_span_splice: span on spliced list gives (before, inserted :: after)
-  -- - deleteExtraNRs_loop_sets: loop preserves set union
-  -- - h_ge_after_all: all elements in after have lo >= start
-  --
-  -- The proof requires navigating Lean's definitional equality for match expressions.
-  sorry-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
+  -- Unfold deleteExtraNRs and show it reduces to the cons case
+  show listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+       listSet before ∪ inserted.val.toSet ∪ listSet after
+
+  unfold deleteExtraNRs
+  -- The span on (before ++ inserted :: after) with predicate p gives (before, inserted :: after)
+  -- We need to convince Lean the match takes the cons branch
+  have h_span_rw : List.span p (before ++ inserted :: after) = (before, inserted :: after) := h_span_splice
+
+  -- Rewrite the span in the definition
+  conv_lhs =>
+    arg 1
+    rw [h_span_rw]
+
+  -- Now the match sees (inserted :: after) so it takes the cons branch
+  simp only []
+
+  -- Set up the initial value that appears in the cons branch
+  set initialHi := max inserted.val.hi stop
+  have h_inserted_le : inserted.val.lo ≤ inserted.val.hi := inserted.property
+  have h_max_ge : inserted.val.hi ≤ initialHi := le_max_left _ _
+  have h_initial_valid : inserted.val.lo ≤ initialHi := le_trans h_inserted_le h_max_ge
+  set initial := mkNR inserted.val.lo initialHi h_initial_valid
+  set res := deleteExtraNRs_loop initial after
+
+  -- The result is: before ++ res.fst :: res.snd
+  have h_result : listSet (before ++ res.fst :: res.snd) =
+                  listSet before ∪ listSet (res.fst :: res.snd) := listSet_append _ _
+  rw [h_result]
+
+  -- Apply the loop lemma
+  have h_initial_lo : initial.val.lo = start := by
+    simp [initial, mkNR, inserted]
+  have h_loop := deleteExtraNRs_loop_sets start after initial h_initial_lo h_ge_after_all
+  rw [h_loop]
+
+  -- Now we have: listSet before ∪ (initial.toSet ∪ listSet after)
+  -- Need to show this equals: listSet before ∪ inserted.toSet ∪ listSet after
+  -- Note: initial has lo = inserted.lo = start, hi = max inserted.hi stop = max stop stop = stop
+  have h_initial_eq : initial.val.toSet = inserted.val.toSet := by
+    have h_ins_hi : inserted.val.hi = stop := by simp [inserted, mkNR]
+    have h_init_hi : initialHi = max stop stop := by simp [initialHi, h_ins_hi]
+    have : initialHi = stop := by simp [h_init_hi]
+    simp [initial, inserted, mkNR, IntRange.toSet, this]
+
+  rw [h_initial_eq, Set.union_assoc]-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
 private lemma listSet_eq_listToSet (rs : List NR) :
     listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
