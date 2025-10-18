@@ -587,9 +587,68 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
       IntRange.toSet_eq_empty_of_hi_lt_lo hempty
     simp [hempty, hEmpty]
   · -- Non-empty range case
-    -- This follows from deleteExtraNRs_sets_after_splice_of_chain
-    -- once that lemma is completed and we convert between listSet and listToSet
-    sorry/-– Spec for the “extend previous” branch of `internalAddC`.
+    have hle : r.lo ≤ r.hi := not_lt.mp hempty
+    simp only [hempty, dite_false]
+
+    -- Use the chain invariant
+    have hchain : List.Pairwise NR.before s.ranges := s.ok
+    have hchain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
+
+    -- The result is fromNRsUnsafe (internalAdd2NRs s.ranges r.lo r.hi hle)
+    -- internalAdd2NRs does span, then deleteExtraNRs on the spliced list
+    unfold internalAdd2NRs
+
+    -- Set up the split
+    set split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+    set before := split.fst
+    set after := split.snd
+    set inserted := mkNR r.lo r.hi hle
+
+    -- Apply the splice lemma
+    have h_splice := deleteExtraNRs_sets_after_splice_of_chain s.ranges r.lo r.hi hle hchain_loLE
+
+    -- Convert fromNRsUnsafe result to listSet
+    have h_result_toSet : (fromNRsUnsafe (deleteExtraNRs (before ++ inserted :: after) r.lo r.hi)).toSet =
+                          listSet (deleteExtraNRs (before ++ inserted :: after) r.lo r.hi) := by
+      unfold fromNRsUnsafe
+      rw [RangeSetBlaze.toSet_eq_listToSet]
+      rfl
+
+    -- Now we have result.toSet = listSet (deleteExtraNRs ...) and h_splice says what that equals
+    -- Goal after rewriting should be to show listSet before ∪ inserted.toSet ∪ listSet after = s.toSet ∪ r.toSet
+    rw [h_result_toSet, h_splice]
+
+    have h_inserted_eq : inserted.val.toSet = r.toSet := by
+      simp [inserted, mkNR, IntRange.toSet]
+
+    -- Decompose s.ranges via span
+    have h_ranges_eq : s.ranges = before ++ after := by
+      have h_span := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < r.lo)) (l := s.ranges)
+      have h_fst : before = (List.takeWhile (fun nr => decide (nr.val.lo < r.lo)) s.ranges) := by
+        calc before
+          _ = split.fst := rfl
+          _ = (List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges).fst := rfl
+          _ = (List.takeWhile (fun nr => decide (nr.val.lo < r.lo)) s.ranges) := congrArg Prod.fst h_span
+      have h_snd : after = (List.dropWhile (fun nr => decide (nr.val.lo < r.lo)) s.ranges) := by
+        calc after
+          _ = split.snd := rfl
+          _ = (List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges).snd := rfl
+          _ = (List.dropWhile (fun nr => decide (nr.val.lo < r.lo)) s.ranges) := congrArg Prod.snd h_span
+      rw [h_fst, h_snd]
+      exact (List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo < r.lo)) (l := s.ranges)).symm
+
+    -- The LHS still has span on (before ++ after), need to show it gives (before, after)
+    have h_span_reconstruct : List.span (fun nr => decide (nr.val.lo < r.lo)) (before ++ after) = (before, after) := by
+      -- before ++ after = s.ranges by h_ranges_eq, and span on s.ranges = (before, after) by definition
+      rw [← h_ranges_eq]
+
+    rw [h_inserted_eq, RangeSetBlaze.toSet_eq_listToSet, h_ranges_eq]
+    simp only [h_span_reconstruct]
+    -- listSet and listToSet from Basic are definitionally equal - both foldr with ∪
+    -- listSet (before ++ after) = listSet before ∪ listSet after
+    show listSet before ∪ r.toSet ∪ listSet after = listSet (before ++ after) ∪ r.toSet
+    rw [listSet_append]
+    ac_rfl/-– Spec for the “extend previous” branch of `internalAddC`.
 Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
 and `prev.hi < r.hi` so we actually extend. -/
 lemma internalAddC_extendPrev_toSet
