@@ -129,7 +129,7 @@ private def listSet (rs : List NR) : Set Int :=
   induction xs with
   | nil => simp
   | cons x xs ih =>
-      simp [ih, Set.union_left_comm, Set.union_assoc, Set.union_comm]
+      simp [ih, Set.union_left_comm, Set.union_comm]
 
 private lemma takeWhile_append_of_all {α : Type _} (p : α → Bool)
     (l : List α) (x : α) (xs : List α)
@@ -196,7 +196,8 @@ private lemma span_suffix_all_ge_start_of_chain
     ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
   classical
   intro p split
-  have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+  have h_span : split = (xs.takeWhile p, xs.dropWhile p) :=
+    List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
   have h_take : split.fst = xs.takeWhile p := by
     simpa [split] using congrArg Prod.fst h_span
   have h_drop : split.snd = xs.dropWhile p := by
@@ -250,14 +251,14 @@ private lemma span_suffix_all_ge_start_of_chain
   simp [deleteExtraNRs.loop]
 
 /-- Splice lemma assuming the input list is chain-sorted by `lo`. -/
-private lemma deleteExtraNRs_loop_sets
+lemma deleteExtraNRs_loop_sets
     (start : Int) :
-    ∀ pending (current : NR),
+    ∀ (pending : List NR) (current : NR),
       current.val.lo = start →
       (∀ nr ∈ pending, start ≤ nr.val.lo) →
       listSet
-          ((deleteExtraNRs.loop current pending).fst ::
-            (deleteExtraNRs.loop current pending).snd)
+          ((deleteExtraNRs.loop current pending).1 ::
+            (deleteExtraNRs.loop current pending).2)
         =
           current.val.toSet ∪ listSet pending := by
   intro pending
@@ -301,15 +302,15 @@ private lemma deleteExtraNRs_loop_sets
               (merge_step_sets current next horder htouch).symm
           have hloop_simplified :
               listSet
-                  ((deleteExtraNRs.loop current (next :: tail)).fst ::
-                    (deleteExtraNRs.loop current (next :: tail)).snd)
+                  ((deleteExtraNRs.loop current (next :: tail)).1 ::
+                    (deleteExtraNRs.loop current (next :: tail)).2)
                 =
                   merged.val.toSet ∪ listSet tail := by
             simpa [hmerge_dec, hmerged_def] using hrec
           calc
             listSet
-                ((deleteExtraNRs.loop current (next :: tail)).fst ::
-                  (deleteExtraNRs.loop current (next :: tail)).snd)
+                ((deleteExtraNRs.loop current (next :: tail)).1 ::
+                  (deleteExtraNRs.loop current (next :: tail)).2)
                 =
                   merged.val.toSet ∪ listSet tail := hloop_simplified
             _ = (current.val.toSet ∪ next.val.toSet) ∪ listSet tail := by
@@ -325,22 +326,22 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     let before := split.fst
     let after := split.snd
     let inserted := mkNR start stop h
-    listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+  listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
       listSet before ∪ inserted.val.toSet ∪ listSet after := by
   classical
-  -- Bind names so we can rewrite cleanly
-  set split := List.span (fun nr => decide (nr.val.lo < start)) xs
-  set before := split.fst
-  set after := split.snd
-  set inserted := mkNR start stop h
+  -- Bind names so their definitional equalities are available.
+  set split := List.span (fun nr => decide (nr.val.lo < start)) xs with hsplit
+  set before := split.fst with hbefore
+  set after := split.snd with hafter
+  set inserted := mkNR start stop h with hinserted
   let p : NR → Bool := fun nr => decide (nr.val.lo < start)
 
   -- span facts on xs
   have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-  have h_take_split : split.fst = xs.takeWhile p := by
-    simpa [split] using congrArg Prod.fst h_span
-  have h_drop_split : split.snd = xs.dropWhile p := by
-    simpa [split] using congrArg Prod.snd h_span
+  have h_take_split : before = xs.takeWhile p := by
+    simpa [hbefore, hsplit] using (congrArg Prod.fst h_span)
+  have h_drop_split : after = xs.dropWhile p := by
+    simpa [hafter, hsplit] using (congrArg Prod.snd h_span)
 
   -- every elt of before satisfies p
   have h_take_all_aux :
@@ -360,13 +361,13 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   have h_before_all : ∀ nr ∈ before, p nr = true := by
     intro nr hmem
     -- rewrite membership: before = xs.takeWhile p
-    have hmem_split : nr ∈ split.fst := by simpa [before] using hmem
+    have hmem_split : nr ∈ split.fst := by simpa [hbefore] using hmem
     have : nr ∈ xs.takeWhile p := by simpa [h_take_split] using hmem_split
     exact h_take_all_aux this
 
   -- inserted.lo = start, so it breaks the predicate
   have h_inserted_false : p inserted = false := by
-    simp [p, inserted, mkNR]
+    simp [p, hinserted, mkNR]
 
   -- Span of the *spliced* list is exactly (before, inserted :: after)
   have h_span_splice :
@@ -385,15 +386,15 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   -- From the chain invariant on xs we get start ≤ lo for every elt of `after`
   have h_suffix :
       ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
-    simpa [split] using span_suffix_all_ge_start_of_chain xs start hchain
+    simpa [hsplit] using span_suffix_all_ge_start_of_chain xs start hchain
   have h_ge_after_all : ∀ nr ∈ after, start ≤ nr.val.lo := by
     intro nr hmem
-    have hmem_split : nr ∈ split.snd := by simpa [after] using hmem
+    have hmem_split : nr ∈ split.snd := by simpa [hafter] using hmem
     exact h_suffix nr hmem_split
 
   -- Unfold deleteExtraNRs on the spliced list and simplify the head step
   unfold deleteExtraNRs
-  simp [split, before, after, h_span_splice]
+  simp [hsplit, hbefore, hafter, h_span_splice]
 
   -- initial = inserted (since max stop stop = stop)
   have h_initial_eq :
@@ -403,82 +404,21 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
           have := le_max_left inserted.val.hi stop
           exact le_trans hc this)
         = inserted := by
-    apply Subtype.ext; simp [mkNR, inserted, max_self]
+    apply Subtype.ext; simp [hinserted, mkNR, max_self]
 
-  -- Main loop lemma: revert `current` so the IH is polymorphic in it
-  have loop_sets :
-      ∀ pending (current : NR),
-        current.val.lo = start →
-        (∀ nr ∈ pending, start ≤ nr.val.lo) →
-        listSet
-          ((deleteExtraNRs.loop current pending).fst
-            :: (deleteExtraNRs.loop current pending).snd)
-          =
-        current.val.toSet ∪ listSet pending := by
-    intro pending
-    revert current
-    induction pending with
-    | nil =>
-        intro current hcurlo hpend
-        simp [deleteExtraNRs.loop, listSet_cons, listSet_nil, Set.union_comm]
-    | cons next tail ih =>
-        intro current hcurlo hpend
-        dsimp [deleteExtraNRs.loop]
-        by_cases hmerge : next.val.lo ≤ current.val.hi + 1
-        · -- merge branch
-          -- order from start ≤ next.lo
-          have horder : current.val.lo ≤ next.val.lo := by
-            have : start ≤ next.val.lo := hpend next (by simp)
-            simpa [hcurlo] using this
-          -- ¬(hi+1 < next.lo) from ≤
-          have htouch : ¬ (current.val.hi + 1 < next.val.lo) :=
-            not_lt.mpr hmerge
-          -- one-step set equality for the merge
-          have hstep :
-              current.val.toSet ∪ next.val.toSet =
-                (mkNR current.val.lo (max current.val.hi next.val.hi)
-                  (by
-                    have hc : current.val.lo ≤ current.val.hi := current.property
-                    exact le_trans hc (le_max_left _ _))).val.toSet := by
-            simpa using merge_step_sets current next horder htouch
-          -- merged current keeps low endpoint = start
-          have hcurlo' :
-              (mkNR current.val.lo (max current.val.hi next.val.hi)
-                (by
-                  have hc : current.val.lo ≤ current.val.hi := current.property
-                  exact le_trans hc (le_max_left _ _))).val.lo = start := by
-            simpa [mkNR, hcurlo]
-          -- side-condition for the tail
-          have hpend' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
-            intro nr hmem; exact hpend nr (by simp [hmem])
-          -- apply IH to tail with merged current
-          have hrec :=
-            ih (mkNR current.val.lo (max current.val.hi next.val.hi)
-                (by
-                  have hc : current.val.lo ≤ current.val.hi := current.property
-                  exact le_trans hc (le_max_left _ _)))
-               hcurlo' hpend'
-          simp [hmerge, hstep, hrec, listSet_cons, Set.union_left_comm, Set.union_assoc]
-        · -- no-merge: loop returns (current, next :: tail)
-          have hloop :
-              deleteExtraNRs.loop current (next :: tail)
-                = (current, next :: tail) := by
-            simp [deleteExtraNRs.loop, hmerge]
-          simp [hloop, listSet_cons, Set.union_left_comm, Set.union_assoc]
-
-  -- Instatiate loop lemma at (inserted, after)
   have hloop_sets :
       listSet
-        ((deleteExtraNRs.loop inserted after).fst
-          :: (deleteExtraNRs.loop inserted after).snd)
+        ((deleteExtraNRs.loop inserted after).1 ::
+          (deleteExtraNRs.loop inserted after).2)
         = inserted.val.toSet ∪ listSet after := by
-    apply loop_sets after inserted
-    · simp [inserted, mkNR]
-    · exact h_ge_after_all
+    simpa using
+      deleteExtraNRs_loop_sets start after inserted
+        (by simp [hinserted, mkNR])
+        h_ge_after_all
 
   -- Put `before ++ …` back and finish
-  simp [split, before, after, h_initial_eq, hloop_sets,
-        listSet_append, listSet_cons, Set.union_left_comm, Set.union_assoc]
+  simp [hsplit, hbefore, hafter, hinserted, h_initial_eq, hloop_sets,
+        listSet_append, listSet_cons, Set.union_left_comm, Set.union_comm]
 
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
@@ -637,5 +577,6 @@ Next plan:
  B) Once that lemma is available, finish `internalAdd2_toSet` by combining the
     splice-union equality with the preserved-result lemma.
 -/
+
 
 
