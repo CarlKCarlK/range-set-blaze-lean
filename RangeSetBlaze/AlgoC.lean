@@ -662,8 +662,47 @@ lemma internalAddC_extendPrev_toSet
     (h_gap : ¬ prev.val.hi + 1 < r.lo)
     (h_extend : prev.val.hi < r.hi) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
-  -- TODO(next increment): prove by unfolding the branch into
-  -- `fromNRsUnsafe` + `delete_extra` and reusing union facts.
+  -- The extend branch: replace prev with extended range from prev.lo to r.hi, then delete_extra
+  unfold internalAddC
+
+  -- Simplify the outer if
+  have h_not_empty : ¬(r.hi < r.lo) := by
+    intro h
+    have := lt_of_le_of_lt h_nonempty h
+    linarith
+  simp only [h_not_empty, ite_false]  -- Get the span result
+  set split := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
+  set before := split.fst
+  set after := split.snd
+
+  -- Match gives some prev
+  have h_getLast : List.getLast? before = some prev := by
+    calc List.getLast? before
+      _ = List.getLast? split.fst := rfl
+      _ = List.getLast? (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := rfl
+      _ = List.getLast? (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
+        congr 1
+        exact congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+      _ = some prev := h_last
+
+  simp only [h_getLast]
+
+  -- Gap check is false
+  have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
+    simp [h_gap]
+  simp only [h_gap_decide]
+
+  -- Extend check is true
+  simp only [h_extend, dite_true]
+
+  -- Now we're in: delete_extra (fromNRsUnsafe extendedList) target
+  -- where extendedList = dropLast before ++ (extended :: after)
+  -- and extended = mkNR prev.lo r.hi ...
+  -- and target = {lo := prev.lo, hi := r.hi}
+
+  -- The goal is to show this equals s.toSet ∪ r.toSet
+  -- Strategy: show that the extended range covers prev ∪ r, and the result preserves the set union
+
   sorry
 
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
