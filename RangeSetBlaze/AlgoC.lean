@@ -336,12 +336,18 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   set inserted := mkNR start stop h with hinserted
   let p : NR → Bool := fun nr => decide (nr.val.lo < start)
 
-  -- span facts on xs
-  have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-  have h_take_split : before = xs.takeWhile p := by
-    simpa [hbefore, hsplit] using (congrArg Prod.fst h_span)
-  have h_drop_split : after = xs.dropWhile p := by
-    simpa [hafter, hsplit] using (congrArg Prod.snd h_span)
+  -- span facts on xs (use the symmetric orientation so congrArg doesn’t collapse)
+  have h_span_symm :=
+    (List.span_eq_takeWhile_dropWhile (p := p) (l := xs)).symm
+  have h_take_split' :
+      xs.takeWhile p = before :=
+    (congrArg Prod.fst h_span_symm).trans hbefore.symm
+  have h_drop_split' :
+      xs.dropWhile p = after :=
+    (congrArg Prod.snd h_span_symm).trans hafter.symm
+  -- keep the original directions used later
+  have h_take_split : before = xs.takeWhile p := h_take_split'.symm
+  have h_drop_split : after = xs.dropWhile p := h_drop_split'.symm
 
   -- every elt of before satisfies p
   have h_take_all_aux :
@@ -362,7 +368,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     intro nr hmem
     -- rewrite membership: before = xs.takeWhile p
     have hmem_split : nr ∈ split.fst := by simpa [hbefore] using hmem
-    have : nr ∈ xs.takeWhile p := by simpa [h_take_split] using hmem_split
+    have : nr ∈ xs.takeWhile p := by
+      simpa [h_take_split, hsplit] using hmem_split
     exact h_take_all_aux this
 
   -- inserted.lo = start, so it breaks the predicate
