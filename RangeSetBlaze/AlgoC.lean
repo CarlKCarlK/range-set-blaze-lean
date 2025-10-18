@@ -41,6 +41,25 @@ private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (Li
 @[simp] private lemma deleteExtraNRs_loop_nil (current : NR) :
     deleteExtraNRs_loop current [] = (current, []) := rfl
 
+@[simp] private lemma deleteExtraNRs_loop_cons_merge
+    (current next : NR) (tail : List NR)
+    (h : next.val.lo ≤ current.val.hi + 1) :
+  deleteExtraNRs_loop current (next :: tail)
+    =
+  deleteExtraNRs_loop
+    (mkNR current.val.lo (max current.val.hi next.val.hi)
+      (by
+        have hc : current.val.lo ≤ current.val.hi := current.property
+        exact le_trans hc (le_max_left _ _)))
+    tail := by
+  simp [deleteExtraNRs_loop, h]
+
+@[simp] private lemma deleteExtraNRs_loop_cons_noMerge
+    (current next : NR) (tail : List NR)
+    (h : ¬ next.val.lo ≤ current.val.hi + 1) :
+  deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
+  simp [deleteExtraNRs_loop, h]
+
 /-- If two ordered ranges touch or overlap, their union equals the single
 closed interval that stretches to the larger upper end. -/
 private lemma union_touch_eq_Icc_max
@@ -347,14 +366,19 @@ lemma deleteExtraNRs_loop_sets
             merged.val.toSet = current.val.toSet ∪ next.val.toSet := by
           simpa [hmerged_def] using
             (merge_step_sets current next horder htouch).symm
+        have hstep :
+            deleteExtraNRs_loop current (next :: tail)
+              =
+            deleteExtraNRs_loop merged tail := by
+          simpa [hmerged_def] using
+            (deleteExtraNRs_loop_cons_merge current next tail hmerge)
         have hloop_simplified :
             listSet
                 ((deleteExtraNRs_loop current (next :: tail)).fst ::
                   (deleteExtraNRs_loop current (next :: tail)).snd)
               =
                 merged.val.toSet ∪ listSet tail := by
-          -- now simp can unfold the merge branch and rewrite to `loop merged tail`
-          simpa [hmerge, hmerged_def] using hrec
+          simpa [hstep] using hrec
         calc
           listSet
               (let res := deleteExtraNRs_loop current (next :: tail);
@@ -371,7 +395,7 @@ lemma deleteExtraNRs_loop_sets
         have hloop_eq :
             deleteExtraNRs_loop current (next :: tail)
               = (current, next :: tail) := by
-          simp [deleteExtraNRs_loop, hmerge, hmerge']
+          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
         simp [hmerge, hmerge', hloop_eq, listSet_cons, Set.union_left_comm,
           Set.union_assoc]
 
