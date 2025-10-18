@@ -502,28 +502,37 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     have hmem_split : nr ∈ split.snd := by simpa [hafter] using hmem
     exact h_suffix nr hmem_split
 
-  -- Unfold deleteExtraNRs on the spliced list
-  unfold deleteExtraNRs
-
-  -- After rewriting with h_span_splice, the match will bind curr = inserted, tail = after
-  -- Then an initial range is created: mkNR inserted.lo (max inserted.hi stop)
-  -- The loop is called on this initial and after
-  -- We need to show the result equals listSet before ∪ inserted.toSet ∪ listSet after
-
-  -- Key facts we have:
-  -- 1. h_span_splice tells us span on the spliced list gives (before, inserted :: after)
-  -- 2. h_loop (deleteExtraNRs_loop_sets) gives us the correctness of the loop
-  -- 3. The initial range covers [start, stop] which equals inserted.toSet
-
-  sorry
-
--- Bridge lemma: listSet here is the same as listToSet in Basic.lean
+  -- Unfold deleteExtraNRs and apply the loop lemma
+  --
+  -- The challenge: After unfolding deleteExtraNRs, we get a match expression that Lean
+  -- doesn't automatically reduce even though we have h_span_splice showing the span result.
+  -- The match will bind curr = inserted, tail = after, create
+  -- initial = mkNR inserted.lo (max inserted.hi stop), and return
+  -- before ++ (deleteExtraNRs_loop initial after).fst :: (deleteExtraNRs_loop initial after).snd
+  --
+  -- We have all the necessary facts:
+  -- - h_span_splice: span on spliced list gives (before, inserted :: after)
+  -- - deleteExtraNRs_loop_sets: loop preserves set union
+  -- - h_ge_after_all: all elements in after have lo >= start
+  --
+  -- The proof requires navigating Lean's definitional equality for match expressions.
+  sorry-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
 private lemma listSet_eq_listToSet (rs : List NR) :
     listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
-  sorry/-– Spec for the “extend previous” branch of `internalAddC`.
+  classical
+  unfold internalAdd2
+  by_cases hempty : r.hi < r.lo
+  · -- Empty range case
+    have hEmpty : r.toSet = (∅ : Set Int) :=
+      IntRange.toSet_eq_empty_of_hi_lt_lo hempty
+    simp [hempty, hEmpty]
+  · -- Non-empty range case
+    -- This follows from deleteExtraNRs_sets_after_splice_of_chain
+    -- once that lemma is completed and we convert between listSet and listToSet
+    sorry/-– Spec for the “extend previous” branch of `internalAddC`.
 Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
 and `prev.hi < r.hi` so we actually extend. -/
 lemma internalAddC_extendPrev_toSet
@@ -569,13 +578,29 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
             internalAdd2_toSet s r
         ·
-          -- Remaining branch: no gap and we truly extend `prev`.
-          have h_extend : prev.val.hi < r.hi := by
-            -- placeholder derived from the branch guard of `internalAddC`
-            sorry
-          exact
-            internalAddC_extendPrev_toSet s r prev
-              hnonempty hLast (by exact hgap) h_extend
+          -- Remaining branch: no gap (¬hgap) between prev and r
+          -- Need to case-split on whether prev.hi < r.hi
+          by_cases h_extend : prev.val.hi < r.hi
+          · -- prev extends into r: use the extend lemma
+            exact internalAddC_extendPrev_toSet s r prev hnonempty hLast (by exact hgap) h_extend
+          · -- r is covered by prev: internalAddC returns s unchanged
+            -- Need to show s.toSet = s.toSet ∪ r.toSet
+            -- When ¬hgap and ¬h_extend, internalAddC returns s
+            have hbranch : internalAddC s r = s := by
+              sorry  -- Follows from unfolding internalAddC with the conditions
+            rw [hbranch]
+
+            -- Show that r.toSet ⊆ s.toSet
+            have h_r_covered : r.toSet ⊆ s.toSet := by
+              -- prev is in s.ranges (from getLast? of takeWhile)
+              -- ¬hgap: prev.hi + 1 ≥ r.lo, i.e., prev.hi ≥ r.lo - 1
+              -- ¬h_extend: prev.hi ≥ r.hi
+              -- hnonempty: r.lo ≤ r.hi
+              -- So r = [r.lo, r.hi] ⊆ [prev.lo, prev.hi] ⊆ s.toSet
+              sorry
+
+            -- Therefore s.toSet ∪ r.toSet = s.toSet
+            rw [Set.union_eq_self_of_subset_right h_r_covered]
 
 open Classical
 open IntRange
