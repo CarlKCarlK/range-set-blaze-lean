@@ -504,9 +504,9 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 
   -- Unfold deleteExtraNRs on the spliced list
   unfold deleteExtraNRs
-  -- The proof requires careful case analysis on the structure of `after`
-  -- and relating deleteExtraNRs_loop back to the set equality.
-  -- This is left as an exercise for now.
+  -- Completing this proof requires carefully handling the match expression
+  -- and showing that the initial range created from max curr.hi stop
+  -- properly encompasses both inserted and curr when they need to merge.
   sorry
 
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
