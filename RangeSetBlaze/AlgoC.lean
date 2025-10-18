@@ -257,8 +257,8 @@ lemma deleteExtraNRs_loop_sets
       current.val.lo = start →
       (∀ nr ∈ pending, start ≤ nr.val.lo) →
       listSet
-          ((deleteExtraNRs.loop current pending).1 ::
-            (deleteExtraNRs.loop current pending).2)
+          (let res := deleteExtraNRs.loop current pending;
+            res.fst :: res.snd)
         =
           current.val.toSet ∪ listSet pending := by
   intro pending
@@ -302,15 +302,16 @@ lemma deleteExtraNRs_loop_sets
               (merge_step_sets current next horder htouch).symm
           have hloop_simplified :
               listSet
-                  ((deleteExtraNRs.loop current (next :: tail)).1 ::
-                    (deleteExtraNRs.loop current (next :: tail)).2)
+                  ((deleteExtraNRs.loop current (next :: tail)).fst ::
+                    (deleteExtraNRs.loop current (next :: tail)).snd)
                 =
                   merged.val.toSet ∪ listSet tail := by
+            -- now simp can unfold the merge branch and rewrite to `loop merged tail`
             simpa [hmerge_dec, hmerged_def] using hrec
           calc
             listSet
-                ((deleteExtraNRs.loop current (next :: tail)).1 ::
-                  (deleteExtraNRs.loop current (next :: tail)).2)
+                (let res := deleteExtraNRs.loop current (next :: tail);
+                  res.fst :: res.snd)
                 =
                   merged.val.toSet ∪ listSet tail := hloop_simplified
             _ = (current.val.toSet ∪ next.val.toSet) ∪ listSet tail := by
@@ -415,8 +416,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 
   have hloop_sets :
       listSet
-        ((deleteExtraNRs.loop inserted after).1 ::
-          (deleteExtraNRs.loop inserted after).2)
+        (let res := deleteExtraNRs.loop inserted after;
+          res.fst :: res.snd)
         = inserted.val.toSet ∪ listSet after := by
     simpa using
       deleteExtraNRs_loop_sets start after inserted
