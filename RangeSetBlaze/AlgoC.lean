@@ -504,17 +504,17 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 
   -- Unfold deleteExtraNRs on the spliced list
   unfold deleteExtraNRs
-  
+
   -- After rewriting with h_span_splice, the match will bind curr = inserted, tail = after
-  -- Then an initial range is created: mkNR inserted.lo (max inserted.hi stop)  
+  -- Then an initial range is created: mkNR inserted.lo (max inserted.hi stop)
   -- The loop is called on this initial and after
   -- We need to show the result equals listSet before ∪ inserted.toSet ∪ listSet after
-  
+
   -- Key facts we have:
   -- 1. h_span_splice tells us span on the spliced list gives (before, inserted :: after)
   -- 2. h_loop (deleteExtraNRs_loop_sets) gives us the correctness of the loop
   -- 3. The initial range covers [start, stop] which equals inserted.toSet
-  
+
   sorry
 
 -- Bridge lemma: listSet here is the same as listToSet in Basic.lean
