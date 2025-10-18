@@ -265,6 +265,19 @@ private lemma pairwise_before_implies_chain_loLE (xs : List NR)
                 linarith
               · exact hchain_tail
 
+private lemma mem_takeWhile_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α)
+    (h : x ∈ xs.takeWhile p) : p x = true := by
+  induction xs with
+  | nil => cases h
+  | cons y ys ih =>
+      cases hpy : p y with
+      | false => simp [List.takeWhile, hpy] at h
+      | true =>
+          simp [List.takeWhile, hpy] at h
+          cases h with
+          | inl heq => subst heq; exact hpy
+          | inr htail => exact ih htail
+
 private lemma chain_head_le_all_tail
     (y : NR) (ys : List NR)
     (hchain : List.Chain' loLE (y :: ys)) :
@@ -593,11 +606,55 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             -- Show that r.toSet ⊆ s.toSet
             have h_r_covered : r.toSet ⊆ s.toSet := by
               -- prev is in s.ranges (from getLast? of takeWhile)
-              -- ¬hgap: prev.hi + 1 ≥ r.lo, i.e., prev.hi ≥ r.lo - 1
+              -- ¬hgap: prev.hi + 1 ≥ r.lo, so r.lo ≤ prev.hi + 1
               -- ¬h_extend: prev.hi ≥ r.hi
               -- hnonempty: r.lo ≤ r.hi
-              -- So r = [r.lo, r.hi] ⊆ [prev.lo, prev.hi] ⊆ s.toSet
-              sorry
+
+              -- First, establish the bounds: r.lo ≤ prev.hi and r.hi ≤ prev.hi
+              have h_r_lo_le_prev_hi : r.lo ≤ prev.val.hi + 1 := not_lt.mp hgap
+              have h_r_hi_le_prev_hi : r.hi ≤ prev.val.hi := not_lt.mp h_extend
+
+              -- We also need: prev.lo ≤ r.lo
+              -- This comes from the fact that prev is in the "before" part of the span
+              -- where we span by (nr.lo ≤ r.lo), so prev.lo ≤ r.lo
+              have h_prev_lo_le_r_lo : prev.val.lo ≤ r.lo := by
+                -- prev came from getLast? of takeWhile (fun nr => decide (nr.lo ≤ r.lo))
+                -- So prev must satisfy the predicate nr.lo ≤ r.lo
+                let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
+                have h_tw_nonempty : tw ≠ [] := by
+                  intro h_empty
+                  have : tw.getLast? = none := by simp [h_empty]
+                  rw [this] at hLast
+                  cases hLast
+                have h_prev_mem : prev ∈ tw := by
+                  have h_last : tw.getLast h_tw_nonempty = prev := by
+                    have := List.getLast?_eq_getLast h_tw_nonempty
+                    rw [this] at hLast
+                    cases hLast
+                    rfl
+                  rw [← h_last]
+                  exact List.getLast_mem h_tw_nonempty
+                have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+                exact of_decide_eq_true h_pred
+
+              -- Now show r.toSet ⊆ prev.val.toSet
+              have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
+                intro x hx
+                simp [IntRange.toSet] at hx ⊢
+                constructor
+                · calc x
+                    _ ≥ r.lo := hx.1
+                    _ ≥ prev.val.lo := h_prev_lo_le_r_lo
+                · calc x
+                    _ ≤ r.hi := hx.2
+                    _ ≤ prev.val.hi := h_r_hi_le_prev_hi
+
+              -- And prev.val.toSet ⊆ s.toSet because prev ∈ s.ranges
+              have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
+                -- prev is in s.ranges, so its toSet is part of s.toSet
+                sorry
+
+              exact Set.Subset.trans h_r_subset_prev h_prev_in_s
 
             -- Therefore s.toSet ∪ r.toSet = s.toSet
             rw [Set.union_eq_self_of_subset_right h_r_covered]
