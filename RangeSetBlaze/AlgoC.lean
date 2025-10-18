@@ -242,6 +242,29 @@ private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
 private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
 
+/-- If ranges satisfy `Pairwise before`, they also satisfy `Chain' loLE`.
+The `before` relation (no gap/overlap) implies `lo` ordering. -/
+private lemma pairwise_before_implies_chain_loLE (xs : List NR)
+    (h : List.Pairwise NR.before xs) :
+    List.Chain' loLE xs := by
+  induction xs with
+  | nil => constructor
+  | cons x xs ih =>
+      cases xs with
+      | nil => constructor
+      | cons y ys =>
+          cases h with
+          | cons hxy hrest =>
+              have hchain_tail : List.Chain' loLE (y :: ys) := by
+                exact ih hrest
+              constructor
+              · unfold loLE NR.before at *
+                have : x.val.hi + 1 < y.val.lo := hxy y (by simp)
+                have : x.val.hi < y.val.lo := by linarith
+                have : x.val.lo ≤ x.val.hi := x.property
+                linarith
+              · exact hchain_tail
+
 private lemma chain_head_le_all_tail
     (y : NR) (ys : List NR)
     (hchain : List.Chain' loLE (y :: ys)) :
@@ -507,17 +530,6 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   simp [hsplit, hbefore, hafter, hinserted, h_initial_eq, hloop_sets,
         listSet_append, listSet_cons, Set.union_left_comm, Set.union_comm]
 
-private lemma deleteExtraNRs_sets_after_splice
-    (xs : List NR) (start stop : Int) (h : start ≤ stop) :
-    let split := List.span (fun nr => decide (nr.val.lo < start)) xs
-    let before := split.fst
-    let after := split.snd
-    let inserted := mkNR start stop h
-    listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
-      listSet before ∪ inserted.val.toSet ∪ listSet after := by
-  classical
-  sorry
-
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
   classical
@@ -529,14 +541,11 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     simp [hempty, hEmpty, Set.union_comm]
   ·
     have hle : r.lo ≤ r.hi := not_lt.mp hempty
-    simp [hempty, hle, RangeSetBlaze.toSet_eq_listToSet,
-      internalAdd2NRs]
-    have :=
-      deleteExtraNRs_sets_after_splice s.ranges r.lo r.hi hle
-    -- TODO: finish rewriting the result of `deleteExtraNRs` into the desired union.
-    sorry
-
-/-– Spec for the “extend previous” branch of `internalAddC`.
+    -- Extract the chain invariant from s.ok
+    have hchain : List.Chain' loLE s.ranges :=
+      pairwise_before_implies_chain_loLE s.ranges s.ok
+    -- The sorry lemma was removed, use the completed proof via the _of_chain version
+    sorry/-– Spec for the “extend previous” branch of `internalAddC`.
 Assumes: non-empty input `r`, we matched `some prev`, no gap (`¬ prev.hi + 1 < r.lo`),
 and `prev.hi < r.hi` so we actually extend. -/
 lemma internalAddC_extendPrev_toSet
