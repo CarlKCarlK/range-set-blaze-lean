@@ -610,10 +610,58 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     have : initialHi = stop := by simp [h_init_hi]
     simp [initial, inserted, mkNR, IntRange.toSet, this]
 
-  rw [h_initial_eq, Set.union_assoc]-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
+  rw [h_initial_eq, Set.union_assoc]
+
+-- Bridge lemma: listSet here is the same as listToSet in Basic.lean
 private lemma listSet_eq_listToSet (rs : List NR) :
     listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
+/-- The `delete_extra` operation merges overlapping/touching ranges within a given interval.
+It preserves the set semantics: the output represents the same set of integers. -/
+theorem delete_extra_toSet (s : RangeSetBlaze) (r : IntRange) :
+    (delete_extra s r).toSet = s.toSet := by
+  classical
+  unfold delete_extra deleteExtraNRs
+  -- The result is fromNRsUnsafe (deleteExtraNRs s.ranges r.lo r.hi)
+  have h_result : (fromNRsUnsafe
+      (let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+       let before := split.fst
+       let rest := split.snd
+       match rest with
+       | [] => s.ranges
+       | curr :: tail =>
+           let initialHi := max curr.val.hi r.hi
+           let initial := mkNR curr.val.lo initialHi (by
+             have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+             have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
+             exact le_trans hcurr hmax)
+           let result := deleteExtraNRs_loop initial tail
+           before ++ (result.fst :: result.snd))).toSet =
+    listSet
+      (let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+       let before := split.fst
+       let rest := split.snd
+       match rest with
+       | [] => s.ranges
+       | curr :: tail =>
+           let initialHi := max curr.val.hi r.hi
+           let initial := mkNR curr.val.lo initialHi (by
+             have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+             have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
+             exact le_trans hcurr hmax)
+           let result := deleteExtraNRs_loop initial tail
+           before ++ (result.fst :: result.snd)) := by
+    unfold fromNRsUnsafe
+    rw [RangeSetBlaze.toSet_eq_listToSet]
+    rfl
+  rw [h_result]
+
+  -- deleteExtraNRs preserves the set by merging touching/overlapping ranges
+  set split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+
+  -- Since proving this fully requires complex reasoning about the loop,
+  -- we leave it as sorry for now
+  sorry -- Proof requires showing deleteExtraNRs_loop preserves sets
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
   classical
