@@ -1308,9 +1308,38 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
 
           -- Now prove the two takeWhile results are equal
           -- Key insight: every element in takeWhile (≤ r.lo) also satisfies (< r.lo)
-          -- So takeWhile (< r.lo) consumes at least as much
-          -- And it can't consume more (because < is stronger than ≤)
-          sorry
+          -- We'll use the `key` lemma which applies to s.ranges specifically
+          suffices h_suff : ∀ (xs : List NR),
+              (∀ nr ∈ xs.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)), nr.val.lo < r.lo) →
+              xs.takeWhile (fun nr => decide (nr.val.lo < r.lo)) =
+              xs.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) by
+            exact h_suff s.ranges key
+          intro xs hkey
+          induction xs with
+          | nil =>
+              simp [List.takeWhile]
+          | cons hd tl ih =>
+              simp only [List.takeWhile]
+              by_cases h_hd_le : decide (hd.val.lo ≤ r.lo) = true
+              · -- hd satisfies (≤ r.lo), so it should also satisfy (< r.lo)
+                have h_hd_lt : decide (hd.val.lo < r.lo) = true := by
+                  have h_hd_mem : hd ∈ (hd :: tl).takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+                    simp [List.takeWhile, h_hd_le]
+                  have : hd.val.lo < r.lo := hkey hd h_hd_mem
+                  exact decide_eq_true this
+                simp [h_hd_le, h_hd_lt]
+                apply ih
+                intro nr hnr
+                have : nr ∈ (hd :: tl).takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+                  simp [List.takeWhile, h_hd_le]
+                  right
+                  exact hnr
+                exact hkey nr this
+              · -- hd doesn't satisfy (≤ r.lo), so it doesn't satisfy (< r.lo) either
+                have h_hd_not_lt : decide (hd.val.lo < r.lo) = false := by
+                  simp [decide_eq_false_iff_not, not_lt] at h_hd_le ⊢
+                  omega
+                simp [h_hd_le, h_hd_not_lt]
 
         -- Provide the gap witness
         right
