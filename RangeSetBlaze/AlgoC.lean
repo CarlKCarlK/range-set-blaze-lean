@@ -553,7 +553,33 @@ private lemma ok_deleteExtraNRs_loop
           intro nr hmem
           exact hge nr (by simp [hmem])
         · -- Pairwise on (merged :: tail)
-          sorry -- This is the key step: prove from Pairwise (current :: next :: tail)
+          -- Extract the structure of hpw: Pairwise (current :: next :: tail)
+          cases hpw with
+          | cons h_current_rest hpw_rest =>
+              -- h_current_rest: ∀ b ∈ (next :: tail), current ≺ b
+              -- hpw_rest: Pairwise (next :: tail)
+              cases hpw_rest with
+              | cons h_next_tail hpw_tail =>
+                  -- h_next_tail: ∀ b ∈ tail, next ≺ b
+                  -- hpw_tail: Pairwise tail
+                  constructor
+                  · -- Show: ∀ z ∈ tail, merged ≺ z
+                    intro z hz
+                    unfold NR.before at *
+                    -- We have: next ≺ z, i.e., next.hi + 1 < z.lo
+                    have h_next_z : next.val.hi + 1 < z.val.lo := h_next_tail z hz
+                    -- merged.hi = max current.hi next.hi
+                    have h_merged_hi : merged.val.hi = max current.val.hi next.val.hi := by
+                      simp [merged, mkNR]
+                    rw [h_merged_hi]
+                    -- Need: max current.hi next.hi + 1 < z.lo
+                    -- We know both: current ≺ z and next ≺ z
+                    have h_current_z : current.val.hi + 1 < z.val.lo :=
+                      h_current_rest z (by simp [hz])
+                    -- So max current.hi next.hi < z.lo - 1, hence max + 1 < z.lo
+                    have : max current.val.hi next.val.hi < z.val.lo := by omega
+                    omega
+                  · exact hpw_tail
       · -- No merge case
         have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
                           (current, next :: tail) := by
