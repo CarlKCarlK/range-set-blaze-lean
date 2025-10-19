@@ -278,6 +278,28 @@ private lemma mem_takeWhile_satisfies {α : Type _} (p : α → Bool) (xs : List
           | inl heq => subst heq; exact hpy
           | inr htail => exact ih htail
 
+/-- If a list satisfies Pairwise and we decompose it as `pfx ++ [lastElem]`,
+then every element in pfx satisfies the pairwise relation with `lastElem`. -/
+private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
+    (pfx : List α) (lastElem : α)
+    (h : List.Pairwise R (pfx ++ [lastElem])) :
+    ∀ x ∈ pfx, R x lastElem := by
+  intro x hx
+  induction pfx with
+  | nil => cases hx
+  | cons y ys ih =>
+      simp at hx
+      cases hx with
+      | inl heq =>
+          subst heq
+          cases h with
+          | cons hy _ =>
+              exact hy lastElem (by simp)
+      | inr htail =>
+          cases h with
+          | cons _ hrest =>
+              exact ih hrest htail
+
 private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
   | [], _, h => by cases h
