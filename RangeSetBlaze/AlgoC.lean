@@ -1224,17 +1224,3 @@ open Classical
 open IntRange
 
 end RangeSetBlaze
-
-/-
-Blockers:
- 1) Proving `internalAdd2_toSet` requires showing that `deleteExtraNRs` preserves
-    the set union after merging overlapping ranges; exposing its internal `loop`
-    recursion and establishing the interval-union lemmas became non-trivial within
-    the allowed time.
-Next plan:
- A) Introduce a dedicated lemma describing the union preserved by `deleteExtraNRs`
-    by structurally recursing over its pending list and reusing the existing
-    `IntRange` interval lemmas from `Basic`.
- B) Once that lemma is available, finish `internalAdd2_toSet` by combining the
-    splice-union equality with the preserved-result lemma.
--/
