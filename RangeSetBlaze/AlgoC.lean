@@ -10,33 +10,35 @@ open scoped IntRange.NR
 `Algo C` reimplementation that mirrors the production Rust insertion logic
 while operating directly on the `NR` and `RangeSetBlaze` structures.
 
-STATUS: Migrating away from unsafe constructors. The core invariant proof
-ok_deleteExtraNRs is now COMPLETE.
+STATUS: Migrating away from unsafe constructors. Core invariant proofs COMPLETE!
 
-CURRENT WORK (Session 10): Proving ok_internalAdd2NRs - encountered fundamental issue.
+COMPLETED (Session 10):
+- ok_deleteExtraNRs: COMPLETE with hstop gap precondition
+- ok_deleteExtraNRs_loop: COMPLETE (strong version requiring Pairwise (current :: pending))
+- ok_deleteExtraNRs_loop_weak: COMPLETE (weak version requiring only Pairwise pending)
+- ok_internalAdd2NRs: COMPLETE with gap hypothesis (either before = [] or last has gap < start)
+- all_before_strict_before_start: Helper to propagate gap to all elements
 
-Progress made:
-- Span analysis showing deleteExtraNRs correctly processes before ++ inserted :: after
-- Extracted Pairwise on before (from xs via pairwise_append_left)
-- Proved elements in after have lo ≥ start (using dropWhile and chain properties)
-- Proved result elements have lo ≥ start (via deleteExtraNRs_loop_lo_ge)
-- Applied ok_deleteExtraNRs_loop to prove result is Pairwise (Step 3 complete!)
-- Proved after itself is Pairwise (extracted from xs)
+The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
+  - none case: before = [] (gap holds vacuously)
+  - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
 
-BLOCKER DISCOVERED:
-The current proof approach requires proving Pairwise on (inserted :: after),
-which means showing inserted.hi + 1 < first_of_after.lo. However, this is NOT
-provable in general! The inserted range [start, stop] can overlap with elements
-in after - that's exactly what deleteExtraNRs is designed to handle via merging.
+NEXT STEPS:
+To replace fromNRsUnsafe with fromNRs in internalAdd2/internalAddC:
+1. Note predicate mismatch: internalAddC uses (≤ start), internalAdd2NRs uses (< start)
+2. Options:
+   a) Unify the predicates (make both use < or both use ≤)
+   b) Prove a bridging lemma showing the gap transfers between predicates
+   c) Inline internalAdd2NRs directly into internalAddC branches where gap is known
+3. Once predicates match, apply ok_internalAdd2NRs to prove Pairwise invariant
+4. Replace fromNRsUnsafe with fromNRs using the proven invariant
 
-Possible resolutions:
-1. Add precondition that inserted doesn't overlap (but defeats purpose of deleteExtraNRs)
-2. Prove a weaker version of ok_deleteExtraNRs_loop that handles non-Pairwise input
-3. Restructure proof to directly analyze deleteExtraNRs without using the loop lemma
-4. Show that even with overlaps, the output is still Pairwise (different approach)
+Current unsafe constructors (to eventually remove):
+- mkNRUnsafe (line 39): Creates NR without proof
+- fromNRsUnsafe (line 46): Creates RangeSetBlaze without Pairwise proof
+-/
 
-Current approach may need fundamental rethinking.
--/private def mkNRUnsafe (lo hi : Int) : NR :=
+private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
