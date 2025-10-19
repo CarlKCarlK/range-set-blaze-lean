@@ -905,8 +905,61 @@ lemma internalAddC_extendPrev_toSet
         have h_max_eq : max extended.val.hi r.hi = r.hi := by
           simp [h_extended_hi_eq]
 
-        -- Therefore the result preserves the set
-        sorry -- Complete using deleteExtraNRs_loop_sets
+        -- Apply deleteExtraNRs_loop_sets to complete the proof
+        -- After the span, we're in the cons branch of deleteExtraNRs
+        -- Set up initial value and apply the loop lemma
+        set initialHi := max extended.val.hi r.hi with h_initialHi_def
+        have h_extended_prop : extended.val.lo ≤ extended.val.hi := extended.property
+        have h_max_ge : extended.val.hi ≤ initialHi := le_max_left _ _
+        have h_initial_valid : extended.val.lo ≤ initialHi := le_trans h_extended_prop h_max_ge
+        set initial := mkNR extended.val.lo initialHi h_initial_valid with h_initial_def
+
+        -- The loop processes initial :: after
+        have h_initial_lo : initial.val.lo = prev.val.lo := by
+          simp [initial, mkNR, h_extended_lo_eq]
+
+        -- All elements of after have lo ≥ prev.lo (from chain and span properties)
+        have h_after_ge : ∀ nr ∈ after, prev.val.lo ≤ nr.val.lo := by
+          intro nr hmem
+          -- after is the suffix from the span on s.ranges with predicate (lo ≤ r.lo)
+          -- Elements in after have lo > r.lo (from dropWhile)
+          -- And prev.lo ≤ r.lo (from before being takeWhile (lo ≤ r.lo))
+          have h_nr_gt : r.lo < nr.val.lo := by
+            sorry -- Show nr.lo > r.lo: after comes from dropWhile, first element fails predicate
+          have h_prev_le : prev.val.lo ≤ r.lo := by
+            -- prev is in takeWhile (lo ≤ r.lo)
+            have h_prev_in : prev ∈ before := by
+              rw [h_before_decomp]
+              simp
+            have h_take : before = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+              have := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+              exact congrArg Prod.fst this
+            rw [h_take] at h_prev_in
+            have := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_in
+            simp at this
+            exact this
+          exact le_trans h_prev_le (le_of_lt h_nr_gt)
+
+        -- Apply the loop sets lemma
+        have h_loop := deleteExtraNRs_loop_sets prev.val.lo after initial h_initial_lo h_after_ge
+
+        -- The result of deleteExtraNRs in the cons case is before ++ (loop_result)
+        -- And initial.toSet = extended.toSet (since initialHi = r.hi by h_max_eq)
+        have h_initial_eq : initial.val.toSet = extended.val.toSet := by
+          have : initialHi = r.hi := h_max_eq
+          simp [initial, extended, mkNR, IntRange.toSet, this]
+
+        -- Complete the equality
+        calc listSet (List.dropLast before ++
+                (deleteExtraNRs_loop initial after).fst ::
+                (deleteExtraNRs_loop initial after).snd)
+          _ = listSet (List.dropLast before) ∪
+              listSet ((deleteExtraNRs_loop initial after).fst ::
+                      (deleteExtraNRs_loop initial after).snd) := listSet_append _ _
+          _ = listSet (List.dropLast before) ∪ (initial.val.toSet ∪ listSet after) := by rw [h_loop]
+          _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by rw [h_initial_eq]
+          _ = listSet (List.dropLast before ++ (extended :: after)) := by
+              rw [listSet_append]; simp [listSet]
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
