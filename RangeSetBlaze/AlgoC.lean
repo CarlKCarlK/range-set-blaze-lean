@@ -23,6 +23,7 @@ COMPLETED (Session 11):
 - Fixed unused variable warning in ok_deleteExtraNRs
 - Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
 - Moved internalAddC definition to after internalAdd2_safe (line 1134)
+- **Proved span_le_empty_implies_lt_empty**: First bridging lemma showing (≤ start) empty → (< start) empty
 
 The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
   - none case: before = [] (gap holds vacuously)
@@ -30,11 +31,9 @@ The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in intern
 
 NEXT STEPS:
 To replace fromNRsUnsafe with fromNRs in internalAdd2/internalAddC:
-1. Predicate mismatch: internalAddC uses (≤ start), internalAdd2_safe expects (< start)
-2. Need two bridging lemmas:
-   a) Show (≤ start) empty implies (< start) empty for none branch
-   b) Show prev last of (≤ start) with gap implies prev last of (< start) with gap
-3. Wire internalAdd2_safe into both call sites in internalAddC (lines ~1147, ~1152)
+1. ✅ Proved (≤ start) empty implies (< start) empty (span_le_empty_implies_lt_empty)
+2. Prove prev last of (≤ start) with gap implies prev last of (< start) with gap
+3. Wire internalAdd2_safe into both call sites in internalAddC using these lemmas
 4. Once wired, prove ok_internalAddC to show Pairwise preservation end-to-end
 
 Current unsafe constructors (to eventually remove):
@@ -1116,6 +1115,46 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
   exact pairwise_append NR.before before (result.fst :: result.snd)
     hpw_before hpw_result hcross
+
+/-- If the (≤ start) split is empty, then the (< start) split is also empty.
+This is because `< start` is strictly stronger than `≤ start`. -/
+private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
+    (h_le_empty : (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst = []) :
+    (List.span (fun nr => decide (nr.val.lo < start)) xs).fst = [] := by
+  -- Convert both spans to takeWhile
+  have h_le_eq := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo ≤ start)) (l := xs)
+  have h_lt_eq := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs)
+
+  have h_le_take : xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) = [] := by
+    have : (List.span (fun nr => decide (nr.val.lo ≤ start)) xs).fst =
+           xs.takeWhile (fun nr => decide (nr.val.lo ≤ start)) := by
+      rw [h_le_eq]
+    rw [h_le_empty] at this
+    exact this.symm
+
+  -- Show takeWhile (< start) is also empty
+  have h_lt_take : xs.takeWhile (fun nr => decide (nr.val.lo < start)) = [] := by
+    cases hxs : xs with
+    | nil => simp [List.takeWhile]
+    | cons hd tl =>
+      -- If takeWhile (≤ start) is empty, then hd doesn't satisfy (≤ start)
+      have h_hd_not_le : ¬(hd.val.lo ≤ start) := by
+        rw [hxs] at h_le_take
+        simp [List.takeWhile] at h_le_take
+        by_contra h_le
+        simp [h_le] at h_le_take
+      -- Therefore hd doesn't satisfy (< start) either
+      have h_hd_not_lt : ¬(hd.val.lo < start) := fun h => h_hd_not_le (le_of_lt h)
+      -- So takeWhile (< start) stops immediately
+      simp [List.takeWhile, h_hd_not_lt]
+
+  -- Convert back to span
+  have : (List.span (fun nr => decide (nr.val.lo < start)) xs).fst =
+         xs.takeWhile (fun nr => decide (nr.val.lo < start)) := by
+    rw [h_lt_eq]
+  rw [this, h_lt_take]
+
+
 
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
 a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
