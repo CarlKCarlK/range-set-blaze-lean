@@ -14,23 +14,20 @@ STATUS: Migrating away from unsafe constructors. The core invariant proof
 ok_deleteExtraNRs is now COMPLETE.
 
 CURRENT WORK (Session 10): Proving ok_internalAdd2NRs to enable safe constructors.
-Progress: Skeleton complete with span analysis showing that deleteExtraNRs on
-before ++ inserted :: after correctly processes the structure.
+Progress: Main structure in place using pairwise_append pattern.
 
-Proven so far:
-- before contains all elements from xs with lo < start  
-- inserted has lo = start and doesn't satisfy the span predicate
-- span on the spliced list returns (before, inserted :: after) as expected
-- deleteExtraNRs correctly processes this into before ++ (loop result)
+Completed:
+- Span analysis showing deleteExtraNRs correctly processes before ++ inserted :: after
+- Extracted Pairwise on before (from xs via pairwise_append_left)
+- Set up application of ok_deleteExtraNRs_loop for loop result
 
-Next step: Prove the output is Pairwise by showing:
-1. deleteExtraNRs_loop produces Pairwise from (inserted, after)
-2. before is Pairwise (inherited from xs)
-3. Gap exists between before and loop result (elements of before have lo < start,
-   loop result starts with merged element having lo = start)
--/
-
-private def mkNRUnsafe (lo hi : Int) : NR :=
+Remaining (3 sorrys in proof):
+1. Prove Pairwise on (inserted :: after) - need to analyze relationship between
+   inserted and elements of after
+2. Apply ok_deleteExtraNRs_loop with proper preconditions (hlo, hge, hpw)
+3. Prove cross product: all before elements are ≺ all result elements
+   (follows from before having lo < start and result having lo ≥ start)
+-/private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
@@ -709,10 +706,10 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
     let ys := before ++ inserted :: after
     List.Pairwise NR.before (deleteExtraNRs ys start stop) := by
   intro split before after inserted ys
-  
+
   -- Set up the predicate
   set p : NR → Bool := (fun nr => decide (nr.val.lo < start)) with hp
-  
+
   -- Properties of before: all elements satisfy p (i.e., nr.lo < start)
   have h_before_all : ∀ nr ∈ before, p nr = true := by
     intro nr hmem
@@ -724,13 +721,13 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       exact this.1
     rw [this] at hmem
     exact List.mem_takeWhile_imp hmem
-  
+
   -- inserted doesn't satisfy p (inserted.lo = start, so not < start)
   have h_inserted_false : p inserted = false := by
     simp only [p, decide_eq_false_iff_not, not_lt]
     show start ≤ inserted.val.lo
     simp [inserted, mkNR]
-  
+
   -- Span of ys gives back (before, inserted :: after)
   have h_span_ys : List.span p ys = (before, inserted :: after) := by
     have htake : ys.takeWhile p = before :=
@@ -738,22 +735,78 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
     have hdrop : ys.dropWhile p = inserted :: after :=
       dropWhile_append_of_all p before inserted after h_before_all h_inserted_false
     simp [List.span_eq_takeWhile_dropWhile, htake, hdrop]
-  
+
   -- Now analyze deleteExtraNRs on ys
   unfold deleteExtraNRs
-  
+
   -- The span in deleteExtraNRs uses the exact same predicate
-  have h_span_match : 
+  have h_span_match :
     List.span (fun nr => decide (nr.val.lo < start)) ys = (before, inserted :: after) := by
     convert h_span_ys using 1
-  
+
   -- Simplify using the span result
   simp only [h_span_match]
-  
+
   -- Now we have: before ++ (deleteExtraNRs_loop initial after).fst :: (deleteExtraNRs_loop initial after).snd
   -- where initial = mkNR inserted.lo (max inserted.hi stop) = mkNR start (max stop stop) = mkNR start stop
-  
-  sorry
+
+  -- Simplify initial to show it equals inserted
+  have h_initial_eq :
+    let curr := inserted
+    let initialHi := max curr.val.hi stop
+    mkNR curr.val.lo initialHi (by
+      have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+      have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
+      exact le_trans hcurr hmax) = mkNR start stop h_le := by
+    have : max stop stop = stop := max_self stop
+    simp only [inserted, mkNR, this]
+
+  -- Set up for applying ok_deleteExtraNRs_loop
+  set curr := inserted
+  set initialHi := max curr.val.hi stop
+  have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+  have hmax_prop : curr.val.hi ≤ initialHi := le_max_left _ _
+  set initial := mkNR curr.val.lo initialHi (le_trans hcurr hmax_prop)
+  set result := deleteExtraNRs_loop initial after
+
+  -- Need to prove: before ++ (result.fst :: result.snd) is Pairwise
+
+  -- Step 1: Get Pairwise on before (from xs)
+  have hpw_before : List.Pairwise NR.before before := by
+    have h_xs_decomp : xs = before ++ after := by
+      have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+      calc xs
+        _ = xs.takeWhile p ++ xs.dropWhile p := by
+          exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
+        _ = before ++ after := by
+          have h1 : before = xs.takeWhile p := by
+            have : split = (xs.takeWhile p, xs.dropWhile p) := this
+            simp [split, before] at this ⊢
+            exact this.1
+          have h2 : after = xs.dropWhile p := by
+            have : split = (xs.takeWhile p, xs.dropWhile p) :=
+              List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+            simp [split, after] at this ⊢
+            exact this.2
+          rw [h1, h2]
+    rw [h_xs_decomp] at hpw
+    exact pairwise_append_left NR.before before after hpw
+
+  -- Step 2: Get Pairwise on (inserted :: after)
+  have hpw_inserted_after : List.Pairwise NR.before (inserted :: after) := by
+    sorry
+
+  -- Step 3: Apply ok_deleteExtraNRs_loop to get Pairwise on (result.fst :: result.snd)
+  have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
+    sorry
+
+  -- Step 4: Prove cross product: all elements of before are ≺ all elements of result
+  have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
+    sorry
+
+  -- Step 5: Apply pairwise_append
+  exact pairwise_append NR.before before (result.fst :: result.snd)
+    hpw_before hpw_result hcross
 
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
 
