@@ -755,7 +755,7 @@ lemma internalAddC_extendPrev_toSet
     intro h
     have := lt_of_le_of_lt h_nonempty h
     linarith
-  simp only [h_not_empty, ite_false]  -- Get the span result
+  simp only [h_not_empty]  -- Get the span result
   set split := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
   set before := split.fst
   set after := split.snd
@@ -819,7 +819,7 @@ lemma internalAddC_extendPrev_toSet
           (s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
         exact (List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)).symm
       _ = split.fst ++ split.snd := by
-        simp [split, h_span]
+        simp [split]
       _ = before ++ after := rfl
 
   -- Show that before is not empty (since getLast? = some prev)
@@ -1153,7 +1153,7 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             have hbranch : internalAddC s r = s := by
               unfold internalAddC
               -- Simplify the outer if: r.hi < r.lo is false
-              simp only [hempty, ite_false]
+              simp only [hempty]
               -- Now we're in the else branch
               -- We need to relate the span result to hLast
               -- Note: internalAddC uses span with (nr.lo ≤ start = r.lo)
