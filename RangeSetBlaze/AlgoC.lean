@@ -763,16 +763,56 @@ private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs :
         cases h
         exact h_not
 
-/-- When inserting [start,stop] into a Pairwise list via span,
-    elements in 'after' are far enough from stop. -/
--- Lemma for internalAdd2NRs: inserting [start,stop] into a Pairwise list maintains Pairwise.
--- This is a specialized version that doesn't require the hstop gap precondition.
--- The key insight: when we splice before ++ inserted :: after and call deleteExtraNRs,
--- the function correctly merges any overlapping/touching ranges.
--- Strategy: apply ok_deleteExtraNRs with a vacuously true hstop. The hstop precondition
--- is only used when stop > curr.hi, but curr = inserted with curr.hi = stop, so this never happens.
+/-- If `before` is nonempty and its last element is strictly before `start`,
+then every element of `before` is strictly before `start`. -/
+private lemma all_before_strict_before_start
+    (before : List NR) (start : Int)
+    (hpair : List.Pairwise NR.before before)
+    (hne : before ≠ [])
+    (hlast : (before.getLast hne).val.hi + 1 < start) :
+    ∀ x ∈ before, x.val.hi + 1 < start := by
+  -- every x ∈ (dropLast before) satisfies x ≺ last(before)
+  have h_all : ∀ x ∈ List.dropLast before, NR.before x (before.getLast hne) := by
+    -- pairwise on (dropLast before ++ [last])
+    have : List.Pairwise NR.before (List.dropLast before ++ [before.getLast hne]) := by
+      -- standard: before = dropLast before ++ [getLast before]
+      have := List.dropLast_append_getLast hne
+      -- rewrite pairwise along equality
+      simpa [this] using hpair
+    -- extract cross-product from append
+    exact pairwise_prefix_last NR.before (List.dropLast before) (before.getLast hne) this
+  -- now any x ∈ before is either the last or in dropLast
+  intro x hx
+  by_cases hdrop : x ∈ List.dropLast before
+  · have hx_before_last := h_all x hdrop
+    -- x ≺ last ⇒ x.hi + 1 < last.lo, and last.lo ≤ last.hi + 1 < start
+    unfold NR.before at hx_before_last
+    have last_lo_lt_start : (before.getLast hne).val.lo < start := by
+      have : (before.getLast hne).val.lo ≤ (before.getLast hne).val.hi := (before.getLast hne).property
+      calc (before.getLast hne).val.lo
+        _ ≤ (before.getLast hne).val.hi := this
+        _ < (before.getLast hne).val.hi + 1 := by omega
+        _ < start := hlast
+    exact lt_trans hx_before_last last_lo_lt_start
+  · -- x is not in dropLast, so x must be the last
+    have heq : x = before.getLast hne := by
+      have : before = List.dropLast before ++ [before.getLast hne] := (List.dropLast_append_getLast hne).symm
+      rw [this] at hx
+      simp only [List.mem_append, List.mem_singleton] at hx
+      rcases hx with hx | hx
+      · contradiction
+      · exact hx
+    subst heq
+    exact hlast
+
+/-- Lemma for internalAdd2NRs: inserting [start,stop] into a Pairwise list maintains Pairwise.
+This version requires a gap hypothesis: either before is empty, or the last element of before
+is strictly before start. This matches the actual call sites in internalAddC. -/
 private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
-    (hpw : List.Pairwise NR.before xs) :
+    (hpw : List.Pairwise NR.before xs)
+    (hgap : let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+            let before := split.fst
+            before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start) :
     let split := List.span (fun nr => decide (nr.val.lo < start)) xs
     let before := split.fst
     let after := split.snd
@@ -1003,17 +1043,100 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       · exact h_loop_props.2 y hy_tail
 
     -- Need: x.hi + 1 < y.lo
-    -- We have: x.lo < start ≤ y.lo
-    -- Need to prove: x.hi + 1 < start or more generally x.hi + 1 < y.lo
-    -- From Pairwise xs: if before and after are both non-empty,
-    -- last of before ≺ first of after, and first_after.lo ≥ start
-    -- For general x ∈ before: by chain/transitivity, x.hi < first_after.lo
-    -- Since y.lo ≥ start and first_after.lo ≥ start,
-    -- and result preserves lo ≥ start, we have x.hi + 1 < first_after.lo ≤ something
-    -- This requires a careful analysis of the relationship between before, after, and result
-    -- Deferred: this cross product proof is complex and requires handling edge cases
-    -- (empty after, last element of before, etc.)
-    sorry  -- Step 5: Apply pairwise_append
+    -- Strategy: use the gap hypothesis to show all x ∈ before have x.hi + 1 < start,
+    -- and all y in result have y.lo ≥ start (from deleteExtraNRs_loop_lo_ge)
+    have hgap_before : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := hgap
+    rcases hgap_before with hempty | ⟨hne, hlast_gap⟩
+    · -- before is empty, so x ∈ before is vacuous
+      rw [hempty] at hx
+      cases hx
+    · -- Nonempty before with gap: last(before).hi + 1 < start
+      -- From the last-gap, push gap to all elements of before
+      have hall_before : ∀ x ∈ before, x.val.hi + 1 < start :=
+        all_before_strict_before_start before start hpw_before hne hlast_gap
+
+      -- Get: x.hi + 1 < start
+      have hx_lt : x.val.hi + 1 < start := hall_before x hx
+
+      -- Get: start ≤ y.lo (all loop outputs have lo ≥ start)
+      have hy_ge : start ≤ y.val.lo := by
+        simp [result] at hy
+        rcases hy with rfl | hy_tail
+        · -- y = result.fst
+          have h_initial_lo : initial.val.lo = start := by
+            simp [initial, curr, inserted, mkNR]
+          have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+            intro nr hnr
+            have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+            have : after = xs.dropWhile p := by
+              have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
+              simp [split, after] at this ⊢
+              exact this.2
+            rw [this] at hnr
+            by_cases h_empty : xs.dropWhile p = []
+            · rw [h_empty] at hnr; cases hnr
+            · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
+              rw [h_cons] at hnr
+              have h_first_ge : start ≤ first.val.lo := by
+                have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
+                have := List.head?_dropWhile_not (p := p) (l := xs)
+                rw [h_first_head] at this
+                simp at this
+                simp only [p, decide_eq_false_iff_not, not_lt] at this
+                exact this
+              have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
+              have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
+                have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
+                rw [← h_decomp] at h_chain
+                exact List.IsChain.right_of_append h_chain
+              rw [h_cons] at h_chain_drop
+              simp only [List.mem_cons] at hnr
+              rcases hnr with rfl | hnr_tail
+              · exact h_first_ge
+              · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
+                  chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+                exact le_trans h_first_ge h_nr_ge_first
+          have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
+          rw [h_loop_props.1]
+        · -- y ∈ result.snd
+          have h_initial_lo : initial.val.lo = start := by
+            simp [initial, curr, inserted, mkNR]
+          have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+            intro nr hnr
+            have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+            have : after = xs.dropWhile p := by
+              have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
+              simp [split, after] at this ⊢
+              exact this.2
+            rw [this] at hnr
+            by_cases h_empty : xs.dropWhile p = []
+            · rw [h_empty] at hnr; cases hnr
+            · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
+              rw [h_cons] at hnr
+              have h_first_ge : start ≤ first.val.lo := by
+                have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
+                have := List.head?_dropWhile_not (p := p) (l := xs)
+                rw [h_first_head] at this
+                simp at this
+                simp only [p, decide_eq_false_iff_not, not_lt] at this
+                exact this
+              have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
+              have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
+                have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
+                rw [← h_decomp] at h_chain
+                exact List.IsChain.right_of_append h_chain
+              rw [h_cons] at h_chain_drop
+              simp only [List.mem_cons] at hnr
+              rcases hnr with rfl | hnr_tail
+              · exact h_first_ge
+              · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
+                  chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+                exact le_trans h_first_ge h_nr_ge_first
+          have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
+          exact h_loop_props.2 y hy_tail
+
+      -- Conclude: x.hi + 1 < start ≤ y.lo, so x.hi + 1 < y.lo
+      exact lt_of_lt_of_le hx_lt hy_ge  -- Step 5: Apply pairwise_append
   exact pairwise_append NR.before before (result.fst :: result.snd)
     hpw_before hpw_result hcross
 
