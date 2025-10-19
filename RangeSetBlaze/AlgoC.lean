@@ -314,6 +314,7 @@ private lemma pairwise_append_left {α : Type _} (R : α → α → Prop)
             exact hx y (by simp [hy])
           · exact ih ys hrest
 
+
 private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
   | [], _, h => by cases h
@@ -976,7 +977,52 @@ lemma internalAddC_extendPrev_toSet
           -- Elements in after have lo > r.lo (from dropWhile)
           -- And prev.lo ≤ r.lo (from before being takeWhile (lo ≤ r.lo))
           have h_nr_gt : r.lo < nr.val.lo := by
-            sorry -- Show nr.lo > r.lo: after comes from dropWhile, first element fails predicate
+            -- after = dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
+            -- nr ∈ after means nr failed the predicate or comes after an element that did
+            -- We need: nr.val.lo > r.lo (i.e., ¬(nr.val.lo ≤ r.lo))
+            have h_after_dropWhile : after = s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+              calc after
+                _ = split.snd := rfl
+                _ = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).snd := rfl
+                _ = s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+                  have := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+                  exact congrArg Prod.snd this
+            rw [h_after_dropWhile] at hmem
+            -- Use the property that dropWhile elements fail the predicate
+            by_cases h_empty : s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) = []
+            · rw [h_empty] at hmem
+              cases hmem
+            · have ⟨first, rest, h_drop⟩ := List.exists_cons_of_ne_nil h_empty
+              have h_first_gt : r.lo < first.val.lo := by
+                have h_head_prop := List.head?_dropWhile_not (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+                have h_first_is_head : (s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))).head? = some first := by
+                  simp [h_drop]
+                rw [h_first_is_head] at h_head_prop
+                simp at h_head_prop
+                exact h_head_prop
+              rw [h_drop] at hmem
+              simp at hmem
+              cases hmem with
+              | inl heq =>
+                  subst heq
+                  exact h_first_gt
+              | inr hrest =>
+                  -- nr ∈ rest; use chain property to show nr.lo > r.lo
+                  -- Since first.lo > r.lo and chain says later elements have even larger lo
+                  -- Use chain on s.ranges
+                  have h_chain : List.Pairwise NR.before s.ranges := s.ok
+                  have h_chain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges h_chain
+                  -- after is a suffix of s.ranges with chain property
+                  have h_chain_after : List.Chain' loLE (first :: rest) := by
+                    rw [← h_drop]
+                    have h_decomp := List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+                    have : s.ranges = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
+                                      s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := h_decomp.symm
+                    rw [this] at h_chain_loLE
+                    exact List.Chain'.right_of_append h_chain_loLE
+                  have h_first_le_nr : first.val.lo ≤ nr.val.lo :=
+                    chain_head_le_all_tail first rest h_chain_after nr hrest
+                  exact lt_of_lt_of_le h_first_gt h_first_le_nr
           have h_prev_le : prev.val.lo ≤ r.lo := by
             -- prev is in takeWhile (lo ≤ r.lo)
             have h_prev_in : prev ∈ before := by
