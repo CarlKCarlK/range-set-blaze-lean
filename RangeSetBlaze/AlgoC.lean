@@ -1142,9 +1142,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   exact pairwise_append NR.before before (result.fst :: result.snd)
     hpw_before hpw_result hcross
 
-/-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
-
-The proof structure:
+/-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.The proof structure:
 - Span xs into (before, after) at start
 - If after is empty: result is xs, trivially Pairwise
 - If after = curr :: tail:
