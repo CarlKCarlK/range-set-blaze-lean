@@ -1241,8 +1241,22 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
         have before_eq : before_lt = before_le := by
           unfold before_lt split_lt before_le split_le
           simp only [List.span_eq_takeWhile_dropWhile]
-          -- takeWhile (<) = takeWhile (≤) since all elements satisfying (≤) also satisfy (<)
-          -- This follows from the gap property: x.lo < r.lo where x is the last element
+          -- Prove that takeWhile (< r.lo) consumes exactly the same prefix as takeWhile (≤ r.lo)
+          -- Key: the last element x of before_le satisfies x.lo < r.lo (proven above)
+          -- Strategy: show both takeWhile operations stop at the same place
+          have key : ∀ nr ∈ s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)), nr.val.lo < r.lo := by
+            intro nr hnr
+            -- All elements in before_le satisfy nr.lo ≤ r.lo (by definition of takeWhile)
+            have h_le : nr.val.lo ≤ r.lo := by
+              have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges nr hnr
+              exact of_decide_eq_true h_pred
+            -- If nr = x (the last element), we have nr.lo < r.lo by hx_lt
+            by_cases h_eq : nr = x
+            · rw [h_eq]; exact hx_lt
+            · -- If nr ≠ x, then nr appears before x in the list
+              -- Since s.ranges is Pairwise NR.before and x is the last in before_le,
+              -- we have nr.hi < x.lo, so nr.lo ≤ nr.hi < x.lo < r.lo
+              sorry
           sorry
 
         -- Provide the gap witness
