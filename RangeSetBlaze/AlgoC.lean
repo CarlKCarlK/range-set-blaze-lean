@@ -700,8 +700,74 @@ lemma internalAddC_extendPrev_toSet
   -- and extended = mkNR prev.lo r.hi ...
   -- and target = {lo := prev.lo, hi := r.hi}
 
-  -- The goal is to show this equals s.toSet ∪ r.toSet
-  -- Strategy: show that the extended range covers prev ∪ r, and the result preserves the set union
+  -- Set up the extended range and list
+  have h_prev_le : prev.val.lo ≤ prev.val.hi := prev.property
+  have h_r_le : prev.val.hi ≤ r.hi := le_of_lt h_extend
+  have h_extended_le : prev.val.lo ≤ r.hi := le_trans h_prev_le h_r_le
+  set extended := mkNR prev.val.lo r.hi h_extended_le
+  set extendedList := List.dropLast before ++ (extended :: after)
+  set mergedSet := fromNRsUnsafe extendedList
+  set target : IntRange := { lo := prev.val.lo, hi := r.hi }
+
+  -- Unfold delete_extra
+  show (delete_extra mergedSet target).toSet = s.toSet ∪ r.toSet
+  unfold delete_extra
+
+  -- The result is fromNRsUnsafe (deleteExtraNRs mergedSet.ranges target.lo target.hi)
+  have h_mergedSet_ranges : mergedSet.ranges = extendedList := by
+    simp [mergedSet, fromNRsUnsafe]
+
+  have h_result_toSet : (fromNRsUnsafe (deleteExtraNRs extendedList prev.val.lo r.hi)).toSet =
+                        listSet (deleteExtraNRs extendedList prev.val.lo r.hi) := by
+    unfold fromNRsUnsafe
+    rw [RangeSetBlaze.toSet_eq_listToSet]
+    rfl
+
+  rw [h_mergedSet_ranges, h_result_toSet]
+
+  -- Key facts: s.ranges = before ++ after, and before ends with prev
+  have h_ranges_decomp : s.ranges = before ++ after := by
+    have h_span := List.span_eq_takeWhile_dropWhile
+      (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+    calc s.ranges
+      _ = (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))) ++
+          (s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
+        exact (List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)).symm
+      _ = split.fst ++ split.snd := by
+        simp [split, h_span]
+      _ = before ++ after := rfl
+
+  -- Show that before is not empty (since getLast? = some prev)
+  have h_before_ne : before ≠ [] := by
+    intro h
+    simp [h] at h_getLast
+
+  -- Show before = dropLast before ++ [prev]
+  have h_before_decomp : before = List.dropLast before ++ [prev] := by
+    have h_getLast_alt : before.getLast h_before_ne = prev := by
+      have := List.getLast?_eq_getLast h_before_ne
+      rw [h_getLast] at this
+      simp at this
+      exact this.symm
+    conv_lhs => rw [← List.dropLast_append_getLast h_before_ne, h_getLast_alt]
+
+  -- Therefore s.toSet = listSet (dropLast before) ∪ prev.toSet ∪ listSet after
+  have h_s_toSet : s.toSet = listSet (List.dropLast before) ∪ prev.val.toSet ∪ listSet after := by
+    calc s.toSet
+      _ = listSet s.ranges := by rw [RangeSetBlaze.toSet_eq_listToSet]; rfl
+      _ = listSet (before ++ after) := by rw [h_ranges_decomp]
+      _ = listSet before ∪ listSet after := listSet_append _ _
+      _ = listSet (List.dropLast before ++ [prev]) ∪ listSet after := by
+        conv_lhs => arg 1; rw [h_before_decomp]
+      _ = (listSet (List.dropLast before) ∪ prev.val.toSet) ∪ listSet after := by
+        rw [listSet_append]
+        simp [listSet]
+      _ = listSet (List.dropLast before) ∪ prev.val.toSet ∪ listSet after := by
+        ac_rfl
+
+  -- Show that extended.toSet = prev.toSet ∪ r.toSet when ¬h_gap and prev.hi < r.hi
+  have h_extended_covers : extended.val.toSet = prev.val.toSet ∪ r.toSet := by
+    sorry
 
   sorry
 
