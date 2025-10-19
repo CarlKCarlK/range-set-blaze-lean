@@ -1752,11 +1752,8 @@ lemma internalAddC_extendPrev_toSet
   -- Gap check is false
   have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
     simp [h_gap]
-  simp only [h_gap_decide]
 
   -- Extend check is true
-  simp only [h_extend, dite_true]
-
   -- Now we're in: delete_extra (fromNRsUnsafe extendedList) target
   -- where extendedList = dropLast before ++ (extended :: after)
   -- and extended = mkNR prev.lo r.hi ...
@@ -2159,27 +2156,21 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
             -- When ¬hgap and ¬h_extend, internalAddC returns s
             have hbranch : internalAddC s r = s := by
               unfold internalAddC
-              -- Simplify the outer if: r.hi < r.lo is false
-              simp only [hempty]
-              -- Now we're in the else branch
-              -- We need to relate the span result to hLast
-              -- Note: internalAddC uses span with (nr.lo ≤ start = r.lo)
-              -- but hLast uses takeWhile with the same predicate
-              have h_before_getLast :
-                (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst.getLast? = some prev := by
-                have h_span := List.span_eq_takeWhile_dropWhile
-                  (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
-                have : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst =
-                       s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
-                  exact congrArg Prod.fst h_span
-                rw [this]
-                exact hLast
-              -- Now the gap check
-              have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
-                simp [hgap]
-              -- After simplifying, we need to show that the else branch is taken
-              -- because ¬h_extend means the condition is false
-              simp [h_extend]
+              simp [hempty, List.span_eq_takeWhile_dropWhile]
+              split
+              · rename_i h_contra
+                -- h_contra says the getLast? from the (now-simplified) span is none
+                -- but hLast says takeWhile.getLast? is some prev
+                -- After simp with span_eq_, span.1 became takeWhile, so they're the same
+                simp [hLast] at h_contra
+              · rename_i prev' h_match
+                -- Similarly, h_match says (simplified span).getLast? = some prev'
+                -- and hLast says takeWhile.getLast? = some prev
+                have hprev_eq : prev = prev' := by
+                  simp [hLast] at h_match
+                  exact h_match
+                subst hprev_eq
+                simp [hgap, h_extend]
             rw [hbranch]
 
             -- Show that r.toSet ⊆ s.toSet
