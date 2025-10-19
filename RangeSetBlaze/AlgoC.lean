@@ -14,18 +14,20 @@ STATUS: Migrating away from unsafe constructors. The core invariant proof
 ok_deleteExtraNRs is now COMPLETE.
 
 CURRENT WORK (Session 10): Proving ok_internalAdd2NRs to enable safe constructors.
-Progress: Main structure complete, working on remaining details.
+Progress: Nearly complete - only 2 sorrys remaining in the proof.
 
 Completed:
 - Span analysis showing deleteExtraNRs correctly processes before ++ inserted :: after
 - Extracted Pairwise on before (from xs via pairwise_append_left)
 - Proved elements in after have lo ≥ start (using dropWhile and chain properties)
 - Proved result elements have lo ≥ start (via deleteExtraNRs_loop_lo_ge)
+- Applied ok_deleteExtraNRs_loop to prove result is Pairwise (Step 3 complete!)
 
-Remaining (2 sorrys in cross product proof):
-1. Prove Pairwise on (inserted :: after) - need relationship between inserted and after
+Remaining (2 sorrys):
+1. Prove Pairwise on (inserted :: after) - needed as precondition for loop
+   This requires showing inserted.hi + 1 < first_of_after.lo when after is non-empty
 2. Complete cross product gap proof: show x.hi + 1 < y.lo for x ∈ before, y ∈ result
-   Currently have x.lo < start ≤ y.lo, need to establish x.hi < start to close gap
+   Need to establish x.hi < start to close gap (have x.lo < start ≤ y.lo already)
 -/private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
@@ -797,7 +799,52 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
   -- Step 3: Apply ok_deleteExtraNRs_loop to get Pairwise on (result.fst :: result.snd)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
-    sorry
+    -- Need to apply ok_deleteExtraNRs_loop with preconditions
+    have h_initial_lo : initial.val.lo = start := by
+      simp [initial, curr, inserted, mkNR]
+    have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+      -- Already proved in the cross product section, extract it
+      intro nr hnr
+      have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+      have : after = xs.dropWhile p := by
+        have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
+        simp [split, after] at this ⊢
+        exact this.2
+      rw [this] at hnr
+      by_cases h_empty : xs.dropWhile p = []
+      · rw [h_empty] at hnr; cases hnr
+      · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
+        rw [h_cons] at hnr
+        have h_first_ge : start ≤ first.val.lo := by
+          have h_first_head : (xs.dropWhile p).head? = some first := by rw [h_cons]; rfl
+          have := List.head?_dropWhile_not (p := p) (l := xs)
+          rw [h_first_head] at this
+          simp at this
+          simp only [p, decide_eq_false_iff_not, not_lt] at this
+          exact this
+        have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
+        have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
+          have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
+          rw [← h_decomp] at h_chain
+          exact List.IsChain.right_of_append h_chain
+        rw [h_cons] at h_chain_drop
+        simp only [List.mem_cons] at hnr
+        rcases hnr with hnr_eq | hnr_tail
+        · rw [hnr_eq]; exact h_first_ge
+        · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
+            chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+          exact le_trans h_first_ge h_nr_ge_first
+    -- Now apply ok_deleteExtraNRs_loop
+    -- Note: initial = inserted (from h_initial_eq), so Pairwise (initial :: after) = Pairwise (inserted :: after)
+    have hpw_initial_after : List.Pairwise NR.before (initial :: after) := by
+      have : initial = inserted := by
+        calc initial
+          _ = mkNR curr.val.lo initialHi (le_trans hcurr hmax_prop) := rfl
+          _ = mkNR start stop h_le := h_initial_eq
+          _ = inserted := rfl
+      rw [this]
+      exact hpw_inserted_after
+    exact ok_deleteExtraNRs_loop start initial after h_initial_lo h_after_ge hpw_initial_after
 
   -- Step 4: Prove cross product: all elements of before are ≺ all elements of result
   have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
