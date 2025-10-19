@@ -11,13 +11,16 @@ open scoped IntRange.NR
 while operating directly on the `NR` and `RangeSetBlaze` structures.
 
 STATUS: Migrating away from unsafe constructors. The core invariant proof
-ok_deleteExtraNRs is now COMPLETE. Next step: replace fromNRsUnsafe with fromNRs
-at call sites, providing the necessary precondition proofs.
+ok_deleteExtraNRs is now COMPLETE.
 
-Note: ok_deleteExtraNRs requires precondition:
-  ∀ nr ∈ xs, nr.val.lo ≥ start → stop + 1 < nr.val.lo
-This holds when inserting a range [start, stop] into a Pairwise list where
-elements with lo ≥ start are properly separated.
+CURRENT WORK: Proving insert_precondition_holds to enable safe constructor usage.
+This lemma will show that when inserting a range [start,stop] into a Pairwise list,
+the hstop precondition of ok_deleteExtraNRs is satisfied. Once complete, we can
+replace fromNRsUnsafe with fromNRs in internalAdd2 and similar functions.
+
+The key insight: if an element nr has nr.lo ≥ start and would violate stop + 1 < nr.lo,
+it would overlap/touch the inserted range, contradicting the original Pairwise property
+or requiring merging by deleteExtraNRs_loop.
 -/
 
 private def mkNRUnsafe (lo hi : Int) : NR :=
@@ -681,6 +684,26 @@ private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs :
         rename_i h_not
         cases h
         exact h_not
+
+/-- When inserting [start,stop] into a Pairwise list via span,
+    elements in 'after' are far enough from stop. -/
+private lemma insert_precondition_holds
+    (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
+    (hpw : List.Pairwise NR.before xs) :
+    let split := List.span (fun nr => decide (nr.val.lo < start)) xs
+    let before := split.fst
+    let after := split.snd
+    let inserted := mkNR start stop h_le
+    let ys := before ++ inserted :: after
+    ∀ nr ∈ ys, nr.val.lo ≥ start → stop + 1 < nr.val.lo := by
+  intro nr hmem hlo_ge
+  -- The key: if nr.lo ≥ start and nr ∈ ys, then either:
+  -- 1. nr = inserted, but inserted.lo = start, contradicting nr.lo ≥ start unless we mean ≥
+  -- 2. nr ∈ after
+  -- For nr ∈ after with nr.lo ≥ start, we need nr.lo > stop
+  -- This follows from: if nr were close enough to overlap/touch inserted,
+  -- the original Pairwise property would be violated
+  sorry
 
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
 
