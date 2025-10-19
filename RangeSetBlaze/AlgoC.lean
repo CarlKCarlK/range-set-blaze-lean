@@ -24,33 +24,29 @@ COMPLETED (Session 11):
 - Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
 - Moved internalAddC definition to after internalAdd2_safe (line 1134)
 - **Proved span_le_empty_implies_lt_empty**: Bridging lemma showing (≤ start) empty → (< start) empty
+- **Explored predicate unification** (Increment 7): Changing `< start` to `≤ start` requires:
+  * Core change: `inserted` now satisfies predicate (since inserted.lo = start)
+  * Span result changes from `(before, inserted :: after)` to `(before ++ [inserted], after)`
+  * deleteExtraNRs logic needs adjustment since initial element changes position
+  * Multiple proof sections need rewriting (not just mechanical substitution)
+  * Estimated ~15-20 proof sections need updates throughout ok_internalAdd2NRs
 
 The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
   - none case: before = [] (gap holds vacuously)
   - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
 
-NEXT STEPS - Unifying Predicates (Recommended Approach):
-The cleanest path forward is to change internalAdd2NRs to use (≤ start) instead of (< start):
+NEXT STEPS - Two Viable Paths:
 
-1. **Change internalAdd2NRs predicate**: Replace `(< start)` with `(≤ start)` in the split
-   - This makes it match what internalAddC naturally computes
-   - Eliminates all predicate bridging challenges
+**Path A: Predicate Unification (cleaner long-term, more work now)**
+1. Change internalAdd2NRs to use (≤ start)
+2. Rewrite ~15-20 proof sections in ok_internalAdd2NRs for new span structure
+3. Wire internalAdd2_safe into internalAddC (becomes trivial after #2)
 
-2. **Add span_le_suffix_all_gt_start_of_chain**: Helper showing elements after span (≤) satisfy (> start)
-   - Clone of span_suffix_all_ge_start_of_chain but with strict inequality
-   - Needed to prove inserted doesn't satisfy the loop's strict comparison
-
-3. **Update ok_internalAdd2NRs proof**: Mechanically adapt existing proof
-   - Change p := fun nr => decide (nr.val.lo ≤ start)
-   - Use new span_le_suffix_all_gt_start_of_chain helper
-   - Same overall structure: before Pairwise, after Pairwise, cross-product, loop lemma
-
-4. **Wire internalAdd2_safe into internalAddC**: Now trivial!
-   - none branch: Pass Or.inl rfl (before is empty by definition)
-   - some prev with gap: Pass Or.inr ⟨hne, gap⟩ (gap already proven)
-   - No more predicate conversions needed!
-
-Alternative (harder): Keep predicates different and prove complex bridging lemmas
+**Path B: Direct Wiring (works with current proofs)**
+1. Create internalAdd2_safe_from_le: Wrapper that converts (≤) gap to (<) gap
+2. Wire this into internalAddC's two call sites directly
+3. Add small lemma: getLast? = none → before = []
+4. Keep existing ok_internalAdd2NRs proof unchanged
 
 Current unsafe constructors (to eventually remove):
 - mkNRUnsafe (line 39): Creates NR without proof
