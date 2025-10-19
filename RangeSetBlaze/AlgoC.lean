@@ -852,23 +852,28 @@ lemma internalAddC_extendPrev_toSet
         have h_extended_lo_eq : extended.val.lo = prev.val.lo := by simp [extended, mkNR]
         have h_extended_hi_eq : extended.val.hi = r.hi := by simp [extended, mkNR]
 
-        -- When deleteExtraNRs spans at (nr.lo < extended.lo), it will separate:
-        -- - before': elements with lo < extended.lo (which is dropLast before)
-        -- - after': elements with lo ≥ extended.lo (which starts with extended)
+        -- Unfold deleteExtraNRs and analyze the span
+        unfold deleteExtraNRs
 
-        -- The merge operation with initial = mkNR extended.lo (max extended.hi stop)
-        -- Since stop = extended.hi, we have initial = extended
-        -- So the loop just processes extended :: after with initial = extended
+        -- The span separates at (nr.lo < prev.lo)
+        set split := List.span (fun nr => decide (nr.val.lo < prev.val.lo)) extendedList
 
-        -- By deleteExtraNRs_loop_sets, the result is extended.toSet ∪ listSet after
-        -- which equals listSet (extended :: after)
+        -- The match will see extended :: after (since extendedList = dropLast before ++ extended :: after)
+        -- and extended.lo = prev.lo, so the span gives (dropLast before, extended :: after)
 
-        -- Therefore: listSet (before' ++ result) = listSet before' ∪ extended.toSet ∪ listSet after
-        --           = listSet (dropLast before) ∪ extended.toSet ∪ listSet after
-        --           = listSet (dropLast before ++ extended :: after)
-        --           = listSet extendedList
+        -- In the cons case, initial = mkNR extended.lo (max extended.hi r.hi)
+        -- Since extended.hi = r.hi, we have max extended.hi r.hi = r.hi
+        -- So initial.lo = extended.lo and initial.hi = extended.hi
+        -- Therefore initial = extended (same values)
 
-        sorry -- Complete the technical details
+        -- This means the loop processes (extended :: after) with initial having the same
+        -- lo and hi as extended, so the result set is extended.toSet ∪ listSet after
+
+        -- The final result is dropLast before ++ (loop result)
+        -- whose listSet is listSet (dropLast before) ∪ extended.toSet ∪ listSet after
+        -- which equals listSet extendedList
+
+        sorry -- Final technical step showing equality
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
