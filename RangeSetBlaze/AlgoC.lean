@@ -660,6 +660,23 @@ private lemma ok_deleteExtraNRs_loop
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
         simp [h_loop_eq, hpw]
 
+/-- If dropWhile returns a non-empty list, the first element doesn't satisfy the predicate. -/
+private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α) (xs' : List α)
+    (h : xs.dropWhile p = x :: xs') :
+    p x = false := by
+  induction xs with
+  | nil =>
+      simp [List.dropWhile] at h
+  | cons y ys ih =>
+      simp [List.dropWhile] at h
+      split at h
+      · -- p y = true, so y is dropped, recurse
+        exact ih h
+      · -- p y = false, so dropWhile returns y :: ys
+        rename_i h_not
+        cases h
+        exact h_not
+
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
 
 The proof structure:
@@ -674,10 +691,12 @@ The proof structure:
     - From Pairwise on original xs, last of before is ≺ curr
     - Need to show: last of before is ≺ initial (follows since initial extends curr)
 -/
+
 private lemma ok_deleteExtraNRs
     (xs : List NR) (start stop : Int)
     (h : start ≤ stop)
-    (hpw : List.Pairwise NR.before xs) :
+    (hpw : List.Pairwise NR.before xs)
+    (hstop : ∀ nr ∈ xs, nr.val.lo ≥ start → stop + 1 < nr.val.lo) :
     List.Pairwise NR.before (deleteExtraNRs xs start stop) := by
   unfold deleteExtraNRs
   simp only []
@@ -782,16 +801,41 @@ private lemma ok_deleteExtraNRs
                 -- So we must have stop < z.lo - 1, i.e., stop + 1 < z.lo
                 -- But this requires stop ≤ curr.hi essentially for the list to make sense
 
-                -- Let me try: from h_curr_z we have z.lo ≥ curr.hi + 2
-                -- We need to show stop + 1 < z.lo
-                -- i.e., stop < z.lo - 1
-                -- i.e., stop ≤ z.lo - 2
-                -- We have z.lo ≥ curr.hi + 2, so z.lo - 2 ≥ curr.hi
-                -- So if stop ≤ curr.hi, we're done. But we have stop ≥ curr.hi in this branch!
-
-                -- The real issue: we CAN'T prove this in general. We need additional constraints.
-                -- For now, let's admit this is a gap and move to the other sorry
-                sorry
+                -- We need stop + 1 < z.lo
+                -- z ∈ tail, and tail is part of rest = dropWhile (< start)
+                -- So z.lo ≥ start (doesn't satisfy < start predicate)
+                -- Apply hstop precondition: ∀ nr ∈ xs, nr.lo ≥ start → stop + 1 < nr.lo
+                have hz_in_rest : z ∈ rest := by
+                  rw [h_rest_eq]
+                  simp [hz]
+                have hz_in_xs : z ∈ xs := by
+                  rw [h_xs_decomp]
+                  simp [hz_in_rest]
+                have hz_lo_ge : z.val.lo ≥ start := by
+                  -- z ∈ tail, curr :: tail = rest = dropWhile (< start)
+                  -- From Pairwise (curr :: tail) we have curr ≺ z, so z.lo > curr.hi ≥ curr.lo
+                  -- And curr.lo ≥ start because curr is first element not dropped
+                  have : curr.val.hi + 1 < z.val.lo := h_curr_tail z hz
+                  have : curr.val.lo ≤ curr.val.hi := curr.property
+                  -- Need to show curr.lo ≥ start
+                  -- rest = dropWhile (< start), and curr is first element of rest
+                  -- So curr doesn't satisfy (< start), meaning ¬(curr.lo < start), i.e., curr.lo ≥ start
+                  have h_curr_ge : curr.val.lo ≥ start := by
+                    -- rest = dropWhile (< start) and curr :: tail = rest
+                    -- The first element of dropWhile result doesn't satisfy the predicate
+                    have h_rest_drop : rest = xs.dropWhile (fun nr => decide (nr.val.lo < start)) := by
+                      have h_span := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs)
+                      calc rest
+                        _ = split.snd := rfl
+                        _ = (List.span (fun nr => decide (nr.val.lo < start)) xs).snd := by rw [← hsplit]
+                        _ = xs.dropWhile (fun nr => decide (nr.val.lo < start)) := congrArg Prod.snd h_span
+                    have h_dropwhile_eq : xs.dropWhile (fun nr => decide (nr.val.lo < start)) = curr :: tail := by
+                      rw [← h_rest_eq, h_rest_drop]
+                    have h_not_sat := dropWhile_head_not_satisfies (fun nr => decide (nr.val.lo < start)) xs curr tail h_dropwhile_eq
+                    simp at h_not_sat
+                    omega
+                  omega
+                exact hstop z hz_in_xs hz_lo_ge
               · -- max = curr.hi, so we're done
                 have : max curr.val.hi stop = curr.val.hi := max_eq_left (le_of_not_ge hc)
                 rw [this]
