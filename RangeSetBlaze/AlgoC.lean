@@ -9,8 +9,10 @@ open scoped IntRange.NR
 /-
 `Algo C` reimplementation that mirrors the production Rust insertion logic
 while operating directly on the `NR` and `RangeSetBlaze` structures.
-All required invariants are deferred with `sorry` placeholders so the
-module builds while proofs are filled in later.
+
+STATUS: Migrating away from unsafe constructors. The `ok` invariant proofs
+are in progress (see ok_deleteExtraNRs_loop and ok_deleteExtraNRs below).
+Once complete, fromNRsUnsafe will be replaced with fromNRs throughout.
 -/
 
 private def mkNRUnsafe (lo hi : Int) : NR :=
@@ -19,8 +21,14 @@ private def mkNRUnsafe (lo hi : Int) : NR :=
 private def mkNR (lo hi : Int) (h : lo ≤ hi) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
+/-- DEPRECATED: Use `fromNRs` with explicit invariant proof instead. -/
 private def fromNRsUnsafe (xs : List NR) : RangeSetBlaze :=
   { ranges := xs, ok := by sorry }
+
+/-- Safe constructor when you already have the invariant. -/
+private def fromNRs (xs : List NR)
+  (hok : List.Pairwise NR.before xs) : RangeSetBlaze :=
+  { ranges := xs, ok := hok }
 
 -- NEW: top-level version of the previous nested `loop`
 private def deleteExtraNRs_loop (current : NR) (pending : List NR) : Prod NR (List NR) :=
@@ -497,6 +505,89 @@ lemma deleteExtraNRs_loop_sets
               = (current, next :: tail) := by
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
         simp [hmerge, listSet_cons, Set.union_left_comm]
+
+/-- Invariant preservation: `deleteExtraNRs_loop` maintains `Pairwise NR.before`.
+
+The proof structure:
+- Base case (nil): trivial, loop returns `(current, [])`.
+- Inductive case (cons next tail):
+  * If merge (next.lo ≤ current.hi + 1):
+    - Construct merged range from current.lo to max current.hi next.hi
+    - Need to show: if Pairwise on (current :: next :: tail), then Pairwise on (merged :: tail)
+    - Key: merged.lo = current.lo, and merged.hi ≥ next.hi
+    - For any z ∈ tail: next ≺ z implies merged ≺ z (since merged.hi ≤ max current.hi next.hi and max ≤ next.hi in this direction doesn't help, but next ≺ z means next.hi + 1 < z.lo, and since we're merging, current.hi ≈ next.hi)
+    - Apply IH to (merged, tail)
+  * If no merge:
+    - Loop returns (current, next :: tail), which is exactly the input Pairwise structure
+-/
+private lemma ok_deleteExtraNRs_loop
+    (start : Int)
+    (current : NR) (pending : List NR)
+    (hlo : current.val.lo = start)
+    (hge : ∀ nr ∈ pending, start ≤ nr.val.lo)
+    (hpw : List.Pairwise NR.before (current :: pending)) :
+    List.Pairwise NR.before
+      (let res := deleteExtraNRs_loop current pending;
+        res.fst :: res.snd) := by
+  induction pending generalizing current with
+  | nil =>
+      simp
+  | cons next tail ih =>
+      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
+      · -- Merge case
+        set merged := mkNR current.val.lo (max current.val.hi next.val.hi)
+          (by have := current.property; exact le_trans this (le_max_left _ _))
+
+        -- The loop will recursively process (merged, tail)
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
+                          deleteExtraNRs_loop merged tail := by
+          simpa using deleteExtraNRs_loop_cons_merge current next tail hmerge
+
+        rw [h_loop_eq]
+
+        -- Apply IH: need to show Pairwise on (merged :: tail)
+        apply ih merged
+        · -- merged.lo = start
+          simp [merged, mkNR, hlo]
+        · -- ∀ nr ∈ tail, start ≤ nr.lo
+          intro nr hmem
+          exact hge nr (by simp [hmem])
+        · -- Pairwise on (merged :: tail)
+          sorry -- This is the key step: prove from Pairwise (current :: next :: tail)
+      · -- No merge case
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
+                          (current, next :: tail) := by
+          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
+        simp [h_loop_eq, hpw]
+
+/-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
+
+The proof structure:
+- Span xs into (before, after) at start
+- If after is empty: result is xs, trivially Pairwise
+- If after = curr :: tail:
+  * Construct initial range from curr.lo to max curr.hi stop
+  * Apply ok_deleteExtraNRs_loop to (initial, tail)
+  * Combine: need Pairwise on (before ++ loop_result)
+    - This requires showing that all elements of before are ≺ to loop_result.fst
+    - Key: before all have lo < start, initial.lo = curr.lo ≥ start (from span property)
+    - From Pairwise on original xs, last of before is ≺ curr
+    - Need to show: last of before is ≺ initial (follows since initial extends curr)
+-/
+private lemma ok_deleteExtraNRs
+    (xs : List NR) (start stop : Int)
+    (h : start ≤ stop)
+    (hpw : List.Pairwise NR.before xs) :
+    List.Pairwise NR.before (deleteExtraNRs xs start stop) := by
+  unfold deleteExtraNRs
+  simp only []
+  split
+  · rename_i h_nil
+    -- rest = []
+    exact hpw
+  · rename_i curr tail h_cons
+    -- rest = curr :: tail
+    sorry
 
 private lemma deleteExtraNRs_sets_after_splice_of_chain
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
