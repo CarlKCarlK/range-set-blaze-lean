@@ -860,7 +860,38 @@ lemma internalAddC_extendPrev_toSet
 
         -- Show that the span gives (dropLast before, extended :: after)
         have h_span_extended : split' = (List.dropLast before, extended :: after) := by
-          sorry -- Prove span behavior on extendedList
+          -- Need to show: elements of dropLast before have lo < prev.lo
+          -- and extended.lo = prev.lo, so it breaks the predicate
+
+          -- Elements in dropLast before come from before (which is chain-sorted)
+          -- and prev is the last element of before
+          -- So all elements before prev have lo < prev.lo (from chain property)
+          have h_dropLast_all : ∀ nr ∈ List.dropLast before, nr.val.lo < prev.val.lo := by
+            sorry -- Chain property ensures earlier elements have smaller lo
+
+          -- Convert to Bool form for the lemmas
+          have h_dropLast_bool : ∀ nr ∈ List.dropLast before,
+              (decide (nr.val.lo < prev.val.lo)) = true := by
+            intro nr hmem
+            simp [h_dropLast_all nr hmem]
+
+          -- extended.lo = prev.lo, so it fails the predicate
+          have h_extended_bool : (decide (extended.val.lo < prev.val.lo)) = false := by
+            simp [h_extended_lo_eq]
+
+          -- Apply the span lemmas to extendedList which is dropLast before ++ extended :: after
+          have htake := takeWhile_append_of_all
+            (fun nr => decide (nr.val.lo < prev.val.lo))
+            (List.dropLast before) extended after
+            h_dropLast_bool h_extended_bool
+
+          have hdrop := dropWhile_append_of_all
+            (fun nr => decide (nr.val.lo < prev.val.lo))
+            (List.dropLast before) extended after
+            h_dropLast_bool h_extended_bool
+
+          -- Combine to get span result
+          simp [split', List.span_eq_takeWhile_dropWhile, extendedList, htake, hdrop]
 
         -- Rewrite using the span result
         conv_lhs =>
