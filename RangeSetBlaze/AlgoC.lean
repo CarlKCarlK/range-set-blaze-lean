@@ -23,17 +23,22 @@ COMPLETED (Session 11):
 - Fixed unused variable warning in ok_deleteExtraNRs
 - Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
 - Moved internalAddC definition to after internalAdd2_safe (line 1134)
-- **Proved span_le_empty_implies_lt_empty**: First bridging lemma showing (≤ start) empty → (< start) empty
+- **Proved span_le_empty_implies_lt_empty**: Bridging lemma showing (≤ start) empty → (< start) empty
 
 The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
   - none case: before = [] (gap holds vacuously)
   - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
 
 NEXT STEPS:
-To replace fromNRsUnsafe with fromNRs in internalAdd2/internalAddC:
-1. ✅ Proved (≤ start) empty implies (< start) empty (span_le_empty_implies_lt_empty)
-2. Prove prev last of (≤ start) with gap implies prev last of (< start) with gap
-3. Wire internalAdd2_safe into both call sites in internalAddC using these lemmas
+Wiring internalAdd2_safe into internalAddC is challenging due to:
+1. ✅ Need to convert `getLast? before = none` to `before = []` (doable with match)
+2. Need to show prev last of (≤ start) with gap → prev last of (< start) with gap
+   - Key insight: prev.hi + 1 < start → prev.lo < start (proven in abandoned lemma)
+   - Challenge: Proving prev is actually the *last* element of (< start) split requires
+     showing all elements after prev in (≤ start) split also satisfy (<start)
+     OR showing the (< start) split ends at the same position as (≤ start) split when last has gap
+3. Alternative approach: Instead of bridging predicates, directly modify internalAdd2NRs to use
+   (≤ start) predicate, which would eliminate the mismatch entirely
 4. Once wired, prove ok_internalAddC to show Pairwise preservation end-to-end
 
 Current unsafe constructors (to eventually remove):
@@ -1153,7 +1158,6 @@ private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
          xs.takeWhile (fun nr => decide (nr.val.lo < start)) := by
     rw [h_lt_eq]
   rw [this, h_lt_take]
-
 
 
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
