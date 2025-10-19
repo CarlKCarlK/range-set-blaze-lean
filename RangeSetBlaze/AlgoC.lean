@@ -1240,8 +1240,9 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
         -- The two splits are equal (both cut at the same point)
         have before_eq : before_lt = before_le := by
           unfold before_lt split_lt before_le split_le
-          simp [List.span_eq_takeWhile_dropWhile]
-          -- takeWhile (<) = takeWhile (≤) when all (≤) elements satisfy (<)
+          simp only [List.span_eq_takeWhile_dropWhile]
+          -- takeWhile (<) = takeWhile (≤) since all elements satisfying (≤) also satisfy (<)
+          -- This follows from the gap property: x.lo < r.lo where x is the last element
           sorry
 
         -- Provide the gap witness
