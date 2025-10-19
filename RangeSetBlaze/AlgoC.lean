@@ -322,6 +322,23 @@ private lemma pairwise_append_left {α : Type _} (R : α → α → Prop)
             exact hx y (by simp [hy])
           · exact ih ys hrest
 
+/-- Extract the cross-product property from Pairwise on an append. -/
+private lemma pairwise_append_cross {α : Type _} (R : α → α → Prop)
+    (xs ys : List α) (h : List.Pairwise R (xs ++ ys)) :
+    ∀ x ∈ xs, ∀ y ∈ ys, R x y := by
+  induction xs generalizing ys with
+  | nil => intros; contradiction
+  | cons x xs' ih =>
+      cases h with
+      | cons hx hrest =>
+          intro a ha y hy
+          simp at ha
+          cases ha with
+          | inl heq =>
+              rw [heq]
+              exact hx y (by simp [hy])
+          | inr hmem => exact ih ys hrest a hmem y hy
+
 /-- Construct Pairwise on an append when left is Pairwise, right is Pairwise,
 and all elements of left relate to all elements of right. -/
 private lemma pairwise_append {α : Type _} (R : α → α → Prop)
@@ -526,9 +543,46 @@ lemma deleteExtraNRs_loop_sets
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
         simp [hmerge, listSet_cons, Set.union_left_comm]
 
-/-- Invariant preservation: `deleteExtraNRs_loop` maintains `Pairwise NR.before`.
+/-- Helper: deleteExtraNRs_loop preserves the property that result.fst.lo = start
+and all elements in result.snd have lo ≥ start. -/
+private lemma deleteExtraNRs_loop_lo_ge
+    (start : Int)
+    (current : NR) (pending : List NR)
+    (hlo : current.val.lo = start)
+    (hge : ∀ nr ∈ pending, start ≤ nr.val.lo) :
+    let res := deleteExtraNRs_loop current pending
+    res.fst.val.lo = start ∧ ∀ nr ∈ res.snd, start ≤ nr.val.lo := by
+  induction pending generalizing current with
+  | nil =>
+      simp
+      exact hlo
+  | cons next tail ih =>
+      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
+      · -- Merge case
+        set merged := mkNR current.val.lo (max current.val.hi next.val.hi)
+          (by have := current.property; exact le_trans this (le_max_left _ _))
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
+                          deleteExtraNRs_loop merged tail := by
+          simpa using deleteExtraNRs_loop_cons_merge current next tail hmerge
+        rw [h_loop_eq]
+        apply ih merged
+        · simp [merged, mkNR, hlo]
+        · intro nr hmem
+          exact hge nr (by simp [hmem])
+      · -- No merge case
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) =
+                          (current, next :: tail) := by
+          simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
+        rw [h_loop_eq]
+        simp
+        constructor
+        · exact hlo
+        · constructor
+          · exact hge next (by simp)
+          · intro a ha hmem
+            exact hge ⟨a, nonempty_iff_not_empty a |>.mpr ha⟩ (by simp [hmem])
 
-The proof structure:
+/-- Invariant preservation: `deleteExtraNRs_loop` maintains `Pairwise NR.before`.
 - Base case (nil): trivial, loop returns `(current, [])`.
 - Inductive case (cons next tail):
   * If merge (next.lo ≤ current.hi + 1):
@@ -711,8 +765,32 @@ private lemma ok_deleteExtraNRs
               · -- max = stop, need stop + 1 < z.lo
                 have : max curr.val.hi stop = stop := max_eq_right hc
                 rw [this]
-                -- This case is actually problematic - we can't prove stop + 1 < z.lo in general
-                -- We need a different approach
+                -- We need stop + 1 < z.lo
+                -- From Pairwise curr :: tail, we know curr.hi + 1 < z.lo
+                -- We have stop ≥ curr.hi
+                -- So we need: stop < z.lo
+                -- This is true because z.lo > curr.hi + 1 > curr.hi and we should have stop ≤ curr.hi typically
+                -- But actually, this reveals that the lemma needs a precondition!
+                -- The issue: when deleteExtraNRs is called, we need stop < (first element of rest).lo
+                -- OR we need to accept that initial won't satisfy Pairwise and prove a different lemma
+
+               -- Alternative approach: prove that if stop >= z.lo - 1, then the loop merges
+                -- Actually, let's just constrain to the case where it's valid:
+                -- We need z.lo ≥ start (from span) and we have h : start ≤ stop
+                -- From curr ≺ z: curr.hi + 1 < z.lo, so z.lo ≥ curr.hi + 2
+                -- If stop ≥ z.lo - 1, we'd need to merge, contradicting that z is separate
+                -- So we must have stop < z.lo - 1, i.e., stop + 1 < z.lo
+                -- But this requires stop ≤ curr.hi essentially for the list to make sense
+
+                -- Let me try: from h_curr_z we have z.lo ≥ curr.hi + 2
+                -- We need to show stop + 1 < z.lo
+                -- i.e., stop < z.lo - 1
+                -- i.e., stop ≤ z.lo - 2
+                -- We have z.lo ≥ curr.hi + 2, so z.lo - 2 ≥ curr.hi
+                -- So if stop ≤ curr.hi, we're done. But we have stop ≥ curr.hi in this branch!
+
+                -- The real issue: we CAN'T prove this in general. We need additional constraints.
+                -- For now, let's admit this is a gap and move to the other sorry
                 sorry
               · -- max = curr.hi, so we're done
                 have : max curr.val.hi stop = curr.val.hi := max_eq_left (le_of_not_ge hc)
@@ -720,7 +798,66 @@ private lemma ok_deleteExtraNRs
                 exact h_curr_z
             · exact hpw_tail
     · -- ∀ x ∈ before, ∀ y ∈ (res.fst :: res.snd), x ≺ y
-      sorry
+      intro x hx y hy
+      unfold NR.before
+      -- Strategy: elements in before have lo < start (from span property)
+      -- elements in result come from initial and tail, all have lo ≥ start
+      -- From original Pairwise, if before is non-empty, last of before ≺ first of rest (curr)
+      -- All elements of before ≺ curr (from Pairwise on xs)
+      -- curr.lo = initial.lo and res comes from processing (initial, tail)
+      -- So res.fst.lo ≥ initial.lo = curr.lo ≥ start
+      -- And x.lo < start (from span), x.hi < start - 1 (or close)
+      -- Actually, we need x.hi + 1 < y.lo
+
+      -- First: show x.lo < start
+      have hx_lo : x.val.lo < start := by
+        -- x ∈ before, and before = takeWhile (λ nr, nr.lo < start) xs
+        have h_span := List.span_eq_takeWhile_dropWhile
+          (p := fun nr => decide (nr.val.lo < start)) (l := xs)
+        have : before = xs.takeWhile (fun nr => decide (nr.val.lo < start)) := by
+          calc before
+            _ = split.fst := rfl
+            _ = (List.span (fun nr => decide (nr.val.lo < start)) xs).fst := by rw [← hsplit]
+            _ = xs.takeWhile (fun nr => decide (nr.val.lo < start)) := congrArg Prod.fst h_span
+        rw [this] at hx
+        have := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo < start)) xs x hx
+        simp at this
+        exact this
+
+      -- Second: show y.lo ≥ start
+      -- y ∈ (res.fst :: res.snd), and res comes from loop on (initial, tail)
+      -- Use helper: loop preserves that all elements have lo ≥ curr.lo
+      have h_initial_lo : initial.val.lo = curr.val.lo := by simp [initial, mkNR]
+      have h_tail_lo : ∀ nr ∈ tail, curr.val.lo ≤ nr.val.lo := by
+        intro nr hmem
+        cases hpw_rest with
+        | cons h_curr_tail _ =>
+            unfold NR.before at h_curr_tail
+            have : curr.val.hi + 1 < nr.val.lo := h_curr_tail nr hmem
+            have : curr.val.lo ≤ curr.val.hi := curr.property
+            omega
+      have h_loop_prop := deleteExtraNRs_loop_lo_ge curr.val.lo initial tail h_initial_lo h_tail_lo
+
+      -- Now combine: x.hi + 1 < curr.lo ≤ y.lo
+      -- From Pairwise on xs = before ++ rest, we get ∀ a ∈ before, ∀ b ∈ rest, a ≺ b
+      have h_x_before_curr : x ≺ curr := by
+        have : ∀ a ∈ before, ∀ b ∈ rest, a ≺ b := by
+          rw [h_xs_decomp] at hpw
+          exact pairwise_append_cross NR.before before rest hpw
+        rw [h_rest_eq] at this
+        exact this x hx curr (by simp)
+
+      have h_curr_y : curr.val.lo ≤ y.val.lo := by
+        cases hy with
+        | head =>
+            -- y = res.fst, and res.fst.lo = curr.lo, so curr.lo ≤ y.lo becomes res.fst.lo ≤ res.fst.lo
+            rw [h_loop_prop.left]
+        | tail _ hmem =>
+            exact h_loop_prop.right y hmem
+
+      calc x.val.hi + 1
+        _ < curr.val.lo := by unfold NR.before at h_x_before_curr; exact h_x_before_curr
+        _ ≤ y.val.lo := h_curr_y
 
 private lemma deleteExtraNRs_sets_after_splice_of_chain
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
