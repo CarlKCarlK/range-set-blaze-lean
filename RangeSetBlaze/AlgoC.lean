@@ -1168,6 +1168,23 @@ private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
     rw [h_lt_eq]
   rw [this, h_lt_take]
 
+-- Helper lemma: getLast? = some implies getLast returns the same value
+theorem getLast?_eq_some_getLast {α : Type*} {xs : List α} {x : α} (h : xs.getLast? = some x) :
+    ∃ hne : xs ≠ [], xs.getLast hne = x := by
+  cases xs with
+  | nil => simp at h
+  | cons hd tl =>
+    have hne : hd :: tl ≠ [] := List.cons_ne_nil hd tl
+    use hne
+    simp [List.getLast?] at h
+    cases tl with
+    | nil =>
+      simp [List.getLast, List.getLast?] at h ⊢
+      exact h
+    | cons hd2 tl2 =>
+      simp [List.getLast] at h ⊢
+      exact h
+
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
 a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
 def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
@@ -1211,6 +1228,13 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
         sorry
   internalAdd2_safe s r hgap_lt
 
+@[simp]
+theorem internalAdd2_safe_from_le_eq (s : RangeSetBlaze) (r : IntRange) (hgap : _) :
+    internalAdd2_safe_from_le s r hgap = internalAdd2 s r := by
+  unfold internalAdd2_safe_from_le internalAdd2_safe
+  simp [internalAdd2]
+  split <;> rfl
+
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
@@ -1224,13 +1248,15 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
     match h_last : List.getLast? before with
     | none =>
         -- before is empty, so pass the trivial gap
-        have hgap : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
-          left
-          cases before with
+        have h_before_nil : before = [] := by
+          cases hb : before with
           | nil => rfl
           | cons hd tl =>
+            rw [hb] at h_last
             simp [List.getLast?] at h_last
-            split at h_last <;> simp at h_last
+        have hgap : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
+          left
+          exact h_before_nil
         internalAdd2_safe_from_le s r hgap
     | some prev =>
         if hgap : decide (prev.val.hi + 1 < start) then
@@ -1241,9 +1267,9 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
               intro h_empty
               simp [h_empty] at h_last
             use hne
-            have : (before.getLast hne) = prev := by
-              sorry -- Need: getLast? = some prev → getLast hne = prev
-            rw [this]
+            have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
+            have : hne = hne' := proof_irrel hne hne'
+            rw [this, heq]
             exact of_decide_eq_true hgap
           internalAdd2_safe_from_le s r hgap_proof
         else
@@ -1723,8 +1749,6 @@ lemma internalAddC_extendPrev_toSet
         exact congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
       _ = some prev := h_last
 
-  simp only [h_getLast]
-
   -- Gap check is false
   have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
     simp [h_gap]
@@ -2083,17 +2107,47 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
         optPrev
     cases optPrev with
     | none =>
-        have hbranch : internalAddC s r = internalAdd2 s r := by
-          simp [internalAddC, hempty, hLast]
-        simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
-          internalAdd2_toSet s r
+        have : internalAddC s r = internalAdd2 s r := by
+          simp [internalAddC, hempty, List.span_eq_takeWhile_dropWhile]
+          split
+          · rfl
+          · rename_i prev h_last
+            exfalso
+            have heq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 =
+                       List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges := by
+              rw [List.span_eq_takeWhile_dropWhile]
+            have : (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).getLast? = some prev := by
+              rw [←heq]; exact h_last
+            rw [hLast] at this
+            simp at this
+        rw [this]
+        exact internalAdd2_toSet s r
     | some prev =>
         by_cases hgap : prev.val.hi + 1 < r.lo
         ·
-          have hbranch : internalAddC s r = internalAdd2 s r := by
-            simp [internalAddC, hempty, hLast, hgap]
-          simpa [hbranch, RangeSetBlaze.toSet_eq_listToSet] using
-            internalAdd2_toSet s r
+          have : internalAddC s r = internalAdd2 s r := by
+            simp [internalAddC, hempty, List.span_eq_takeWhile_dropWhile]
+            split
+            · rename_i h_last
+              exfalso
+              have heq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 =
+                         List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges := by
+                rw [List.span_eq_takeWhile_dropWhile]
+              have : (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).getLast? = none := by
+                rw [←heq]; exact h_last
+              rw [hLast] at this
+              simp at this
+            · rename_i prev' h_last
+              have heq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 =
+                         List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges := by
+                rw [List.span_eq_takeWhile_dropWhile]
+              have : prev = prev' := by
+                have : some prev = some prev' := by rw [←hLast, ←heq, h_last]
+                injection this
+              subst this
+              simp [hgap]
+          rw [this]
+          exact internalAdd2_toSet s r
         ·
           -- Remaining branch: no gap (¬hgap) between prev and r
           -- Need to case-split on whether prev.hi < r.hi
@@ -2120,11 +2174,9 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
                   exact congrArg Prod.fst h_span
                 rw [this]
                 exact hLast
-              simp only [h_before_getLast]
               -- Now the gap check
               have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
                 simp [hgap]
-              simp only [h_gap_decide]
               -- After simplifying, we need to show that the else branch is taken
               -- because ¬h_extend means the condition is false
               simp [h_extend]
