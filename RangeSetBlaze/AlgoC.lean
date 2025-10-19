@@ -856,24 +856,26 @@ lemma internalAddC_extendPrev_toSet
         unfold deleteExtraNRs
 
         -- The span separates at (nr.lo < prev.lo)
-        set split := List.span (fun nr => decide (nr.val.lo < prev.val.lo)) extendedList
+        set split' := List.span (fun nr => decide (nr.val.lo < prev.val.lo)) extendedList
 
-        -- The match will see extended :: after (since extendedList = dropLast before ++ extended :: after)
-        -- and extended.lo = prev.lo, so the span gives (dropLast before, extended :: after)
+        -- Show that the span gives (dropLast before, extended :: after)
+        have h_span_extended : split' = (List.dropLast before, extended :: after) := by
+          sorry -- Prove span behavior on extendedList
 
-        -- In the cons case, initial = mkNR extended.lo (max extended.hi r.hi)
-        -- Since extended.hi = r.hi, we have max extended.hi r.hi = r.hi
-        -- So initial.lo = extended.lo and initial.hi = extended.hi
-        -- Therefore initial = extended (same values)
+        -- Rewrite using the span result
+        conv_lhs =>
+          arg 1
+          rw [h_span_extended]
 
-        -- This means the loop processes (extended :: after) with initial having the same
-        -- lo and hi as extended, so the result set is extended.toSet ∪ listSet after
+        -- Now we're in the cons case with extended :: after
+        simp only []
 
-        -- The final result is dropLast before ++ (loop result)
-        -- whose listSet is listSet (dropLast before) ∪ extended.toSet ∪ listSet after
-        -- which equals listSet extendedList
+        -- Since extended.hi = r.hi, the initial range simplifies
+        have h_max_eq : max extended.val.hi r.hi = r.hi := by
+          simp [h_extended_hi_eq]
 
-        sorry -- Final technical step showing equality
+        -- Therefore the result preserves the set
+        sorry -- Complete using deleteExtraNRs_loop_sets
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
