@@ -847,16 +847,28 @@ lemma internalAddC_extendPrev_toSet
   -- For now, we can show the sets are equal by rewriting using what we have
   calc listSet (deleteExtraNRs extendedList prev.val.lo r.hi)
     _ = listSet extendedList := by
-        -- Observation: deleteExtraNRs only merges overlapping/touching ranges
-        -- Merging preserves the set union: (A ∪ B) when merged stays A ∪ B
-        -- Since extended already covers [prev.lo, r.hi], any merges with after
-        -- elements will preserve the overall union
+        -- Key observation: extended.lo = prev.lo and extended.hi = r.hi
+        -- So deleteExtraNRs is called with start = extended.lo and stop = extended.hi
+        have h_extended_lo_eq : extended.val.lo = prev.val.lo := by simp [extended, mkNR]
+        have h_extended_hi_eq : extended.val.hi = r.hi := by simp [extended, mkNR]
 
-        -- The key is that extended = mkNR prev.lo r.hi already spans the full range
-        -- we care about, so deleteExtraNRs won't change the mathematical set,
-        -- only potentially merge some ranges together
+        -- When deleteExtraNRs spans at (nr.lo < extended.lo), it will separate:
+        -- - before': elements with lo < extended.lo (which is dropLast before)
+        -- - after': elements with lo ≥ extended.lo (which starts with extended)
 
-        sorry -- Direct proof that deleteExtraNRs preserves listSet in this case
+        -- The merge operation with initial = mkNR extended.lo (max extended.hi stop)
+        -- Since stop = extended.hi, we have initial = extended
+        -- So the loop just processes extended :: after with initial = extended
+
+        -- By deleteExtraNRs_loop_sets, the result is extended.toSet ∪ listSet after
+        -- which equals listSet (extended :: after)
+
+        -- Therefore: listSet (before' ++ result) = listSet before' ∪ extended.toSet ∪ listSet after
+        --           = listSet (dropLast before) ∪ extended.toSet ∪ listSet after
+        --           = listSet (dropLast before ++ extended :: after)
+        --           = listSet extendedList
+
+        sorry -- Complete the technical details
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
