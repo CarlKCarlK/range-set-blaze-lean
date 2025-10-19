@@ -846,7 +846,21 @@ lemma internalAddC_extendPrev_toSet
 
   -- For now, we can show the sets are equal by rewriting using what we have
   calc listSet (deleteExtraNRs extendedList prev.val.lo r.hi)
-    _ = listSet extendedList := by sorry  -- deleteExtraNRs preserves the set union
+    _ = listSet extendedList := by
+        -- deleteExtraNRs preserves the set union
+        -- We use deleteExtraNRs_sets_after_splice_of_chain
+        -- The extendedList = dropLast before ++ extended :: after
+        -- When we call deleteExtraNRs with start = prev.lo, it will span at (nr.lo < prev.lo)
+        -- This gives before' = dropLast before (since all have lo < prev.lo)
+        -- and after' = extended :: after (since extended.lo = prev.lo)
+
+        -- We need to show extendedList is chain-sorted
+        have hchain : List.Pairwise NR.before s.ranges := s.ok
+        have hchain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
+
+        -- Since extendedList replaces [prev] with [extended] where extended.lo = prev.lo,
+        -- and the chain property depends on lo ordering, extendedList is also chain-sorted
+        sorry -- Proving chain property of extendedList requires more work
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
