@@ -24,29 +24,31 @@ COMPLETED (Session 11):
 - Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
 - Moved internalAddC definition to after internalAdd2_safe (line 1134)
 - **Proved span_le_empty_implies_lt_empty**: Bridging lemma showing (≤ start) empty → (< start) empty
-- **Explored predicate unification** (Increment 7): Changing `< start` to `≤ start` requires:
-  * Core change: `inserted` now satisfies predicate (since inserted.lo = start)
-  * Span result changes from `(before, inserted :: after)` to `(before ++ [inserted], after)`
-  * deleteExtraNRs logic needs adjustment since initial element changes position
-  * Multiple proof sections need rewriting (not just mechanical substitution)
-  * Estimated ~15-20 proof sections need updates throughout ok_internalAdd2NRs
+- **Explored predicate unification** (Increment 8): Requires ~15-20 proof sections to be rewritten
+- **Created internalAdd2_safe_from_le** (Increment 9): Wrapper accepting (≤) gaps and converting to (<)
+- **Wired into internalAddC** (Increment 9): Both `none` and `some prev with gap` branches now use safe constructor
+
+Current status: 3 sorrys (was 2)
+- Line 60: mkNRUnsafe (intentional, to be eliminated)
+- Line 67: fromNRsUnsafe (intentional, to be eliminated)
+- Line ~1207: internalAdd2_safe_from_le conversion (new, needs proof)
+- Line ~1241: getLast? = some prev → getLast hne = prev (new, small lemma needed)
 
 The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
-  - none case: before = [] (gap holds vacuously)
-  - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
+  - none case: before = [] (gap holds vacuously) ✅ WIRED
+  - some prev with gap: prev.val.hi + 1 < start (gap provided directly) ✅ WIRED (with sorry)
 
-NEXT STEPS - Two Viable Paths:
+NEXT STEPS:
 
-**Path A: Predicate Unification (cleaner long-term, more work now)**
-1. Change internalAdd2NRs to use (≤ start)
-2. Rewrite ~15-20 proof sections in ok_internalAdd2NRs for new span structure
-3. Wire internalAdd2_safe into internalAddC (becomes trivial after #2)
+**Immediate (to get back to 2 sorrys):**
+1. Prove getLast? = some x → getLast hne = x (simple List lemma)
+2. Prove (≤) last with gap → (<) last with gap in internalAdd2_safe_from_le
+   - Key insight: prev.hi + 1 < start implies prev.lo < start
+   - Need to show prev is in the (<) split and is its last element
 
-**Path B: Direct Wiring (works with current proofs)**
-1. Create internalAdd2_safe_from_le: Wrapper that converts (≤) gap to (<) gap
-2. Wire this into internalAddC's two call sites directly
-3. Add small lemma: getLast? = none → before = []
-4. Keep existing ok_internalAdd2NRs proof unchanged
+**Then:**
+3. Fix broken proofs in internalAddC_correct (they reference old internalAdd2 calls)
+4. Consider making extend-prev branch safe too (uses fromNRsUnsafe currently)
 
 Current unsafe constructors (to eventually remove):
 - mkNRUnsafe (line 39): Creates NR without proof
@@ -1166,7 +1168,6 @@ private lemma span_le_empty_implies_lt_empty (xs : List NR) (start : Int)
     rw [h_lt_eq]
   rw [this, h_lt_take]
 
-
 /-- Safe version of internalAdd2 that uses the gap hypothesis to construct
 a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
 def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
@@ -1185,6 +1186,31 @@ def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
       ok_internalAdd2NRs xs r.lo r.hi hle s.ok hgap_lt
     fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
 
+/-- Wrapper for internalAdd2_safe that accepts a gap hypothesis with (≤ start) predicate
+and converts it to the (< start) predicate needed by internalAdd2_safe. -/
+def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
+    (hgap_le :
+      let split := List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
+      let before := split.fst
+      before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
+    RangeSetBlaze :=
+  -- Convert the (≤) gap to (<) gap
+  have hgap_lt : let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+                 let before := split.fst
+                 before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo := by
+    cases hgap_le with
+    | inl h_empty =>
+        -- The (≤ start) split is empty, so the (< start) split is also empty
+        left
+        exact span_le_empty_implies_lt_empty s.ranges r.lo h_empty
+    | inr h =>
+        -- The (≤ start) split has a last element with a gap
+        -- Need to show it's also the last of the (< start) split with the same gap
+        obtain ⟨hne_le, h_gap⟩ := h
+        right
+        sorry
+  internalAdd2_safe s r hgap_lt
+
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
@@ -1195,12 +1221,31 @@ def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
     let split := List.span (fun nr => decide (nr.val.lo <= start)) xs
     let before := split.fst
     let after := split.snd
-    match List.getLast? before with
+    match h_last : List.getLast? before with
     | none =>
-        internalAdd2 s r
+        -- before is empty, so pass the trivial gap
+        have hgap : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
+          left
+          cases before with
+          | nil => rfl
+          | cons hd tl =>
+            simp [List.getLast?] at h_last
+            split at h_last <;> simp at h_last
+        internalAdd2_safe_from_le s r hgap
     | some prev =>
-        if decide (prev.val.hi + 1 < start) then
-          internalAdd2 s r
+        if hgap : decide (prev.val.hi + 1 < start) then
+          -- prev has a gap, pass it along
+          have hgap_proof : before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < start := by
+            right
+            have hne : before ≠ [] := by
+              intro h_empty
+              simp [h_empty] at h_last
+            use hne
+            have : (before.getLast hne) = prev := by
+              sorry -- Need: getLast? = some prev → getLast hne = prev
+            rw [this]
+            exact of_decide_eq_true hgap
+          internalAdd2_safe_from_le s r hgap_proof
         else
           if h_lt : prev.val.hi < stop then
             have h_nonempty : prev.val.lo ≤ prev.val.hi := prev.property
