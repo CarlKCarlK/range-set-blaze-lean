@@ -858,9 +858,27 @@ lemma internalAddC_extendPrev_toSet
         have hchain : List.Pairwise NR.before s.ranges := s.ok
         have hchain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
 
-        -- Since extendedList replaces [prev] with [extended] where extended.lo = prev.lo,
-        -- and the chain property depends on lo ordering, extendedList is also chain-sorted
-        sorry -- Proving chain property of extendedList requires more work
+        -- Actually, we can simplify: deleteExtraNRs with start = prev.lo and stop = r.hi
+        -- will merge extended with elements of after that overlap/touch it.
+        -- The key observation is that extended already encompasses prev ∪ r,
+        -- so after the merge, the final set is the same as extendedList's set.
+
+        -- We already know extendedList = dropLast before ++ extended :: after
+        -- and extended.toSet = prev.toSet ∪ r.toSet
+
+        -- Since deleteExtraNRs only merges ranges that overlap/touch, and
+        -- the elements of dropLast before are strictly less than prev.lo = extended.lo,
+        -- they won't be affected by the merge operation.
+
+        -- For a simpler approach: show that listSet is preserved
+        -- Note that deleteExtraNRs can only merge ranges, not split them
+        -- So listSet (deleteExtraNRs xs start stop) ⊆ listSet xs always holds
+
+        -- In our case, since extended already covers [prev.lo, r.hi],
+        -- any additional merging with after elements will still maintain
+        -- the union property we need.
+
+        sorry -- Need to prove listSet preservation more carefully
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
