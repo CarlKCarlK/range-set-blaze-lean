@@ -29,17 +29,28 @@ The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in intern
   - none case: before = [] (gap holds vacuously)
   - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
 
-NEXT STEPS:
-Wiring internalAdd2_safe into internalAddC is challenging due to:
-1. ✅ Need to convert `getLast? before = none` to `before = []` (doable with match)
-2. Need to show prev last of (≤ start) with gap → prev last of (< start) with gap
-   - Key insight: prev.hi + 1 < start → prev.lo < start (proven in abandoned lemma)
-   - Challenge: Proving prev is actually the *last* element of (< start) split requires
-     showing all elements after prev in (≤ start) split also satisfy (<start)
-     OR showing the (< start) split ends at the same position as (≤ start) split when last has gap
-3. Alternative approach: Instead of bridging predicates, directly modify internalAdd2NRs to use
-   (≤ start) predicate, which would eliminate the mismatch entirely
-4. Once wired, prove ok_internalAddC to show Pairwise preservation end-to-end
+NEXT STEPS - Unifying Predicates (Recommended Approach):
+The cleanest path forward is to change internalAdd2NRs to use (≤ start) instead of (< start):
+
+1. **Change internalAdd2NRs predicate**: Replace `(< start)` with `(≤ start)` in the split
+   - This makes it match what internalAddC naturally computes
+   - Eliminates all predicate bridging challenges
+
+2. **Add span_le_suffix_all_gt_start_of_chain**: Helper showing elements after span (≤) satisfy (> start)
+   - Clone of span_suffix_all_ge_start_of_chain but with strict inequality
+   - Needed to prove inserted doesn't satisfy the loop's strict comparison
+
+3. **Update ok_internalAdd2NRs proof**: Mechanically adapt existing proof
+   - Change p := fun nr => decide (nr.val.lo ≤ start)
+   - Use new span_le_suffix_all_gt_start_of_chain helper
+   - Same overall structure: before Pairwise, after Pairwise, cross-product, loop lemma
+
+4. **Wire internalAdd2_safe into internalAddC**: Now trivial!
+   - none branch: Pass Or.inl rfl (before is empty by definition)
+   - some prev with gap: Pass Or.inr ⟨hne, gap⟩ (gap already proven)
+   - No more predicate conversions needed!
+
+Alternative (harder): Keep predicates different and prove complex bridging lemmas
 
 Current unsafe constructors (to eventually remove):
 - mkNRUnsafe (line 39): Creates NR without proof
