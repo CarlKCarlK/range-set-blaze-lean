@@ -300,6 +300,20 @@ private lemma pairwise_prefix_last {α : Type _} (R : α → α → Prop)
           | cons _ hrest =>
               exact ih hrest htail
 
+/-- Extract Pairwise on the left part of an append. -/
+private lemma pairwise_append_left {α : Type _} (R : α → α → Prop)
+    (xs ys : List α) (h : List.Pairwise R (xs ++ ys)) :
+    List.Pairwise R xs := by
+  induction xs generalizing ys with
+  | nil => constructor
+  | cons x xs' ih =>
+      cases h with
+      | cons hx hrest =>
+          constructor
+          · intro y hy
+            exact hx y (by simp [hy])
+          · exact ih ys hrest
+
 private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
   | [], _, h => by cases h
@@ -889,7 +903,22 @@ lemma internalAddC_extendPrev_toSet
           -- and prev is the last element of before
           -- So all elements before prev have lo < prev.lo (from chain property)
           have h_dropLast_all : ∀ nr ∈ List.dropLast before, nr.val.lo < prev.val.lo := by
-            sorry -- Chain property ensures earlier elements have smaller lo
+            intro nr hmem
+            -- We have Pairwise NR.before on s.ranges
+            have h_pairwise : List.Pairwise NR.before s.ranges := s.ok
+            -- before is a prefix of s.ranges, so Pairwise holds on before
+            have h_pairwise_before : List.Pairwise NR.before before := by
+              rw [h_ranges_decomp] at h_pairwise
+              exact pairwise_append_left NR.before before after h_pairwise
+            -- Now use pairwise_prefix_last on before = dropLast before ++ [prev]
+            rw [h_before_decomp] at h_pairwise_before
+            have h_all_before_prev := pairwise_prefix_last NR.before (List.dropLast before) prev h_pairwise_before
+            have h_nr_before_prev : NR.before nr prev := h_all_before_prev nr hmem
+            -- NR.before means nr.hi + 1 < prev.lo, which implies nr.lo < prev.lo
+            unfold NR.before at h_nr_before_prev
+            have h_nr_hi_bound : nr.val.hi + 1 < prev.val.lo := h_nr_before_prev
+            have h_nr_prop : nr.val.lo ≤ nr.val.hi := nr.property
+            linarith
 
           -- Convert to Bool form for the lemmas
           have h_dropLast_bool : ∀ nr ∈ List.dropLast before,
