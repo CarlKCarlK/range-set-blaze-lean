@@ -847,38 +847,16 @@ lemma internalAddC_extendPrev_toSet
   -- For now, we can show the sets are equal by rewriting using what we have
   calc listSet (deleteExtraNRs extendedList prev.val.lo r.hi)
     _ = listSet extendedList := by
-        -- deleteExtraNRs preserves the set union
-        -- We use deleteExtraNRs_sets_after_splice_of_chain
-        -- The extendedList = dropLast before ++ extended :: after
-        -- When we call deleteExtraNRs with start = prev.lo, it will span at (nr.lo < prev.lo)
-        -- This gives before' = dropLast before (since all have lo < prev.lo)
-        -- and after' = extended :: after (since extended.lo = prev.lo)
+        -- Observation: deleteExtraNRs only merges overlapping/touching ranges
+        -- Merging preserves the set union: (A ∪ B) when merged stays A ∪ B
+        -- Since extended already covers [prev.lo, r.hi], any merges with after
+        -- elements will preserve the overall union
 
-        -- We need to show extendedList is chain-sorted
-        have hchain : List.Pairwise NR.before s.ranges := s.ok
-        have hchain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
+        -- The key is that extended = mkNR prev.lo r.hi already spans the full range
+        -- we care about, so deleteExtraNRs won't change the mathematical set,
+        -- only potentially merge some ranges together
 
-        -- Actually, we can simplify: deleteExtraNRs with start = prev.lo and stop = r.hi
-        -- will merge extended with elements of after that overlap/touch it.
-        -- The key observation is that extended already encompasses prev ∪ r,
-        -- so after the merge, the final set is the same as extendedList's set.
-
-        -- We already know extendedList = dropLast before ++ extended :: after
-        -- and extended.toSet = prev.toSet ∪ r.toSet
-
-        -- Since deleteExtraNRs only merges ranges that overlap/touch, and
-        -- the elements of dropLast before are strictly less than prev.lo = extended.lo,
-        -- they won't be affected by the merge operation.
-
-        -- For a simpler approach: show that listSet is preserved
-        -- Note that deleteExtraNRs can only merge ranges, not split them
-        -- So listSet (deleteExtraNRs xs start stop) ⊆ listSet xs always holds
-
-        -- In our case, since extended already covers [prev.lo, r.hi],
-        -- any additional merging with after elements will still maintain
-        -- the union property we need.
-
-        sorry -- Need to prove listSet preservation more carefully
+        sorry -- Direct proof that deleteExtraNRs preserves listSet in this case
     _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
     _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
     _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
