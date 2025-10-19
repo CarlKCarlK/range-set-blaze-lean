@@ -835,7 +835,26 @@ lemma internalAddC_extendPrev_toSet
       · -- x ∈ [r.lo, r.hi]
         exact ⟨le_trans h_prev_lo_le_r_lo hx_lo, hx_hi⟩
 
-  sorry
+  -- Now we need to show: listSet (deleteExtraNRs extendedList prev.lo r.hi) = s.toSet ∪ r.toSet
+  -- We have:
+  --   s.toSet = listSet (dropLast before) ∪ prev.toSet ∪ listSet after (from h_s_toSet)
+  --   extended.toSet = prev.toSet ∪ r.toSet (from h_extended_covers)
+  --   extendedList = dropLast before ++ extended :: after
+
+  -- The key insight: deleteExtraNRs on extendedList will merge extended with after if needed,
+  -- but won't change dropLast before (since those elements have lo < prev.lo)
+
+  -- For now, we can show the sets are equal by rewriting using what we have
+  calc listSet (deleteExtraNRs extendedList prev.val.lo r.hi)
+    _ = listSet extendedList := by sorry  -- deleteExtraNRs preserves the set union
+    _ = listSet (List.dropLast before ++ (extended :: after)) := rfl
+    _ = listSet (List.dropLast before) ∪ listSet (extended :: after) := listSet_append _ _
+    _ = listSet (List.dropLast before) ∪ (extended.val.toSet ∪ listSet after) := by simp [listSet]
+    _ = listSet (List.dropLast before) ∪ ((prev.val.toSet ∪ r.toSet) ∪ listSet after) := by
+        rw [h_extended_covers]
+    _ = listSet (List.dropLast before) ∪ prev.val.toSet ∪ r.toSet ∪ listSet after := by ac_rfl
+    _ = (listSet (List.dropLast before) ∪ prev.val.toSet ∪ listSet after) ∪ r.toSet := by ac_rfl
+    _ = s.toSet ∪ r.toSet := by rw [← h_s_toSet]
 
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAddC s r).toSet = s.toSet ∪ r.toSet := by
