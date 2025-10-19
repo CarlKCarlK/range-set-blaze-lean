@@ -322,6 +322,26 @@ private lemma pairwise_append_left {α : Type _} (R : α → α → Prop)
             exact hx y (by simp [hy])
           · exact ih ys hrest
 
+/-- Construct Pairwise on an append when left is Pairwise, right is Pairwise,
+and all elements of left relate to all elements of right. -/
+private lemma pairwise_append {α : Type _} (R : α → α → Prop)
+    (xs ys : List α)
+    (hxs : List.Pairwise R xs)
+    (hys : List.Pairwise R ys)
+    (hcross : ∀ x ∈ xs, ∀ y ∈ ys, R x y) :
+    List.Pairwise R (xs ++ ys) := by
+  induction xs with
+  | nil => exact hys
+  | cons x xs' ih =>
+      cases hxs with
+      | cons hx_xs' hxs' =>
+          constructor
+          · intro y hy
+            simp at hy
+            cases hy with
+            | inl hmem => exact hx_xs' y hmem
+            | inr hmem => exact hcross x (by simp) y hmem
+          · exact ih hxs' (fun x' hx' y hy => hcross x' (by simp [hx']) y hy)
 
 private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
     nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
@@ -613,7 +633,94 @@ private lemma ok_deleteExtraNRs
     exact hpw
   · rename_i curr tail h_cons
     -- rest = curr :: tail
-    sorry
+    -- Get the split structure
+    set split := List.span (fun nr => decide (nr.val.lo < start)) xs with hsplit
+    set before := split.fst with hbefore
+    set rest := split.snd with hrest
+
+    -- Reconstruct xs from before ++ rest
+    have h_xs_decomp : xs = before ++ rest := by
+      have := List.span_eq_takeWhile_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs)
+      calc xs
+        _ = xs.takeWhile (fun nr => decide (nr.val.lo < start)) ++
+            xs.dropWhile (fun nr => decide (nr.val.lo < start)) := by
+          exact (List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo < start)) (l := xs)).symm
+        _ = split.fst ++ split.snd := by simp [split]
+        _ = before ++ rest := rfl
+
+    -- Extract Pairwise on before and rest
+    have hpw_before : List.Pairwise NR.before before := by
+      rw [h_xs_decomp] at hpw
+      exact pairwise_append_left NR.before before rest hpw
+
+    have hpw_rest : List.Pairwise NR.before rest := by
+      have h_eq : xs = before ++ rest := h_xs_decomp
+      rw [h_eq] at hpw
+      clear h_eq h_xs_decomp
+      revert hpw
+      induction before with
+      | nil => intro hpw; exact hpw
+      | cons x xs ih =>
+          intro hpw
+          cases hpw with
+          | cons _ hrest => exact ih hrest
+
+    -- rest = curr :: tail from h_cons
+    have h_rest_eq : rest = curr :: tail := h_cons
+    rw [h_rest_eq] at hpw_rest
+
+    -- Construct initial and result
+    set initialHi := max curr.val.hi stop with hinitialHi
+    have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
+    have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
+    have hinit : curr.val.lo ≤ initialHi := le_trans hcurr hmax
+    set initial := mkNR curr.val.lo initialHi hinit with hinitial
+    set res := deleteExtraNRs_loop initial tail with hres
+
+    -- Need to show: Pairwise (before ++ res.fst :: res.snd)
+    -- Use pairwise_append helper
+    apply pairwise_append NR.before
+    · exact hpw_before
+    · -- Pairwise on (res.fst :: res.snd)
+      apply ok_deleteExtraNRs_loop curr.val.lo initial tail
+      · simp [initial, mkNR]
+      · -- ∀ nr ∈ tail, curr.lo ≤ nr.lo
+        intro nr hmem
+        -- From Pairwise (curr :: tail), we have curr ≺ nr
+        cases hpw_rest with
+        | cons h_curr_tail _ =>
+            unfold NR.before at h_curr_tail
+            have : curr.val.hi + 1 < nr.val.lo := h_curr_tail nr hmem
+            have : curr.val.lo ≤ curr.val.hi := curr.property
+            omega
+      · -- Pairwise (initial :: tail)
+        -- initial extends curr (same lo, larger hi), so initial ≺ z for all z that curr ≺ z
+        cases hpw_rest with
+        | cons h_curr_tail hpw_tail =>
+            constructor
+            · intro z hz
+              unfold NR.before at *
+              have h_curr_z : curr.val.hi + 1 < z.val.lo := h_curr_tail z hz
+              have h_initial_lo : initial.val.lo = curr.val.lo := by simp [initial, mkNR]
+              have h_initial_hi : initial.val.hi = max curr.val.hi stop := by
+                simp [initial, mkNR, initialHi]
+              rw [h_initial_hi]
+              -- Need max curr.hi stop + 1 < z.lo
+              -- We have curr.hi + 1 < z.lo
+              by_cases hc : curr.val.hi ≤ stop
+              · -- max = stop, need stop + 1 < z.lo
+                have : max curr.val.hi stop = stop := max_eq_right hc
+                rw [this]
+                -- This case is actually problematic - we can't prove stop + 1 < z.lo in general
+                -- We need a different approach
+                sorry
+              · -- max = curr.hi, so we're done
+                have : max curr.val.hi stop = curr.val.hi := max_eq_left (le_of_not_ge hc)
+                rw [this]
+                exact h_curr_z
+            · exact hpw_tail
+    · -- ∀ x ∈ before, ∀ y ∈ (res.fst :: res.snd), x ≺ y
+      sorry
 
 private lemma deleteExtraNRs_sets_after_splice_of_chain
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
