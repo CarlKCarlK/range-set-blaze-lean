@@ -13,14 +13,20 @@ while operating directly on the `NR` and `RangeSetBlaze` structures.
 STATUS: Migrating away from unsafe constructors. The core invariant proof
 ok_deleteExtraNRs is now COMPLETE.
 
-CURRENT WORK: Proving insert_precondition_holds to enable safe constructor usage.
-This lemma will show that when inserting a range [start,stop] into a Pairwise list,
-the hstop precondition of ok_deleteExtraNRs is satisfied. Once complete, we can
-replace fromNRsUnsafe with fromNRs in internalAdd2 and similar functions.
+CURRENT WORK (Session 10): Proving ok_internalAdd2NRs to enable safe constructors.
+Challenge: ok_deleteExtraNRs requires input to be Pairwise, but in internalAdd2NRs
+we splice before ++ inserted :: after which is NOT Pairwise (inserted may overlap).
 
-The key insight: if an element nr has nr.lo ≥ start and would violate stop + 1 < nr.lo,
-it would overlap/touch the inserted range, contradicting the original Pairwise property
-or requiring merging by deleteExtraNRs_loop.
+Simplified approach: Prove that the OUTPUT of deleteExtraNRs on this spliced list
+is Pairwise, without requiring the input to be Pairwise. This needs a structural
+analysis of how deleteExtraNRs handles the specific pattern.
+
+Key observation: deleteExtraNRs spans at start, giving before (unchanged) and
+rest = inserted :: after. Since before has all lo < start and rest has all lo ≥ start,
+before is disjoint from the merged result. So we need to prove:
+1. deleteExtraNRs_loop produces Pairwise from inserted :: after
+2. before is Pairwise (from original xs via span)
+3. Combining them maintains Pairwise (gap between before and merged result)
 -/
 
 private def mkNRUnsafe (lo hi : Int) : NR :=
@@ -687,22 +693,27 @@ private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs :
 
 /-- When inserting [start,stop] into a Pairwise list via span,
     elements in 'after' are far enough from stop. -/
-private lemma insert_precondition_holds
-    (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
+-- Lemma for internalAdd2NRs: inserting [start,stop] into a Pairwise list maintains Pairwise.
+-- This is a specialized version that doesn't require the hstop gap precondition.
+-- The key insight: when we splice before ++ inserted :: after and call deleteExtraNRs,
+-- the function correctly merges any overlapping/touching ranges.
+-- Strategy: apply ok_deleteExtraNRs with a vacuously true hstop. The hstop precondition
+-- is only used when stop > curr.hi, but curr = inserted with curr.hi = stop, so this never happens.
+private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start ≤ stop)
     (hpw : List.Pairwise NR.before xs) :
     let split := List.span (fun nr => decide (nr.val.lo < start)) xs
     let before := split.fst
     let after := split.snd
     let inserted := mkNR start stop h_le
     let ys := before ++ inserted :: after
-    ∀ nr ∈ ys, nr.val.lo ≥ start → stop + 1 < nr.val.lo := by
-  intro nr hmem hlo_ge
-  -- The key: if nr.lo ≥ start and nr ∈ ys, then either:
-  -- 1. nr = inserted, but inserted.lo = start, contradicting nr.lo ≥ start unless we mean ≥
-  -- 2. nr ∈ after
-  -- For nr ∈ after with nr.lo ≥ start, we need nr.lo > stop
-  -- This follows from: if nr were close enough to overlap/touch inserted,
-  -- the original Pairwise property would be violated
+    List.Pairwise NR.before (deleteExtraNRs ys start stop) := by
+  intro ys
+  -- We need to provide a Pairwise property for ys to apply ok_deleteExtraNRs
+  -- But wait, ys might not be Pairwise! before ++ inserted :: after could have gaps
+  -- Actually, we need to think about this more carefully...
+  -- The real structure: before has elements with lo < start, after has elements with lo ≥ start
+  -- inserted has lo = start
+  -- So the order is: before (all < start) ++ inserted (= start) ++ after (all ≥ start)
   sorry
 
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.
