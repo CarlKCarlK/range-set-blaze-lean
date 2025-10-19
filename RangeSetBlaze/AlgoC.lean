@@ -242,11 +242,11 @@ private lemma dropWhile_append_of_all {α : Type _} (p : α → Bool)
 private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
 
-/-- If ranges satisfy `Pairwise before`, they also satisfy `Chain' loLE`.
+/-- If ranges satisfy `Pairwise before`, they also satisfy `IsChain loLE`.
 The `before` relation (no gap/overlap) implies `lo` ordering. -/
 private lemma pairwise_before_implies_chain_loLE (xs : List NR)
     (h : List.Pairwise NR.before xs) :
-    List.Chain' loLE xs := by
+    List.IsChain loLE xs := by
   induction xs with
   | nil => constructor
   | cons x xs ih =>
@@ -255,7 +255,7 @@ private lemma pairwise_before_implies_chain_loLE (xs : List NR)
       | cons y ys =>
           cases h with
           | cons hxy hrest =>
-              have hchain_tail : List.Chain' loLE (y :: ys) := by
+              have hchain_tail : List.IsChain loLE (y :: ys) := by
                 exact ih hrest
               constructor
               · unfold loLE NR.before at *
@@ -330,7 +330,7 @@ private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
 
 private lemma chain_head_le_all_tail
     (y : NR) (ys : List NR)
-    (hchain : List.Chain' loLE (y :: ys)) :
+    (hchain : List.IsChain loLE (y :: ys)) :
     ∀ z ∈ ys, y.val.lo ≤ z.val.lo := by
   revert y
   induction ys with
@@ -340,11 +340,13 @@ private lemma chain_head_le_all_tail
   | cons a ys ih =>
       intro y hchain z hz
       have h_y_le_a : y.val.lo ≤ a.val.lo := by
-        simpa [loLE] using List.Chain'.rel_head (R := loLE) hchain
-      have htail : List.Chain' loLE (a :: ys) :=
-        List.Chain'.tail hchain
+        have := List.IsChain.rel_head hchain
+        exact this
+      have htail : List.IsChain loLE (a :: ys) :=
+        List.IsChain.tail hchain
       have hz_cases : z = a ∨ z ∈ ys := by
-        simpa using hz
+        simp only [List.mem_cons] at hz
+        exact hz
       cases hz_cases with
       | inl hz_eq =>
           subst hz_eq
@@ -356,7 +358,7 @@ private lemma chain_head_le_all_tail
 
 private lemma span_suffix_all_ge_start_of_chain
     (xs : List NR) (start : Int)
-    (hchain : List.Chain' loLE xs) :
+    (hchain : List.IsChain loLE xs) :
     let p : NR → Bool := fun nr => decide (nr.val.lo < start)
     let split := List.span p xs
     ∀ nr ∈ split.snd, start ≤ nr.val.lo := by
@@ -365,43 +367,55 @@ private lemma span_suffix_all_ge_start_of_chain
   have h_span : split = (xs.takeWhile p, xs.dropWhile p) :=
     List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
   have h_take : split.fst = xs.takeWhile p := by
-    simpa [split] using congrArg Prod.fst h_span
+    exact congrArg Prod.fst h_span
   have h_drop : split.snd = xs.dropWhile p := by
-    simpa [split] using congrArg Prod.snd h_span
+    exact congrArg Prod.snd h_span
   have h_decomp : split.fst ++ split.snd = xs := by
     have := List.takeWhile_append_dropWhile (p := p) (l := xs)
-    simpa [h_take, h_drop]
+    rw [h_take, h_drop]
+    exact this
   intro nr hmem
   have hchain_append :
-      List.Chain' loLE (split.fst ++ split.snd) := by
-    simpa [h_decomp] using hchain
+      List.IsChain loLE (split.fst ++ split.snd) := by
+    rw [h_decomp]
+    exact hchain
   have hchain_suffix :
-      List.Chain' loLE split.snd :=
-    List.Chain'.right_of_append (l₁ := split.fst)
+      List.IsChain loLE split.snd :=
+    List.IsChain.right_of_append (l₁ := split.fst)
       (l₂ := split.snd) hchain_append
   cases hA : split.snd with
   | nil =>
-      simpa [hA] using hmem
+      rw [hA] at hmem
+      cases hmem
   | cons y ys =>
       have hmem_cons : nr = y ∨ nr ∈ ys := by
-        simpa [hA] using hmem
+        rw [hA] at hmem
+        simp at hmem
+        exact hmem
       have hy_head? :
           (xs.dropWhile p).head? = some y := by
         have : split.snd.head? = some y := by
-          simpa [hA]
-        simpa [h_drop] using this
+          rw [hA]
+          rfl
+        rw [← h_drop]
+        exact this
       have hy_false : p y = false := by
         have := List.head?_dropWhile_not (p := p) (l := xs)
-        simpa [hy_head?] using this
+        rw [hy_head?] at this
+        simp at this
+        exact this
       have hy_not_lt : ¬ y.val.lo < start := by
         intro hy_lt
-        have : p y = true := by
-          simpa [p, hy_lt]
-        simpa [this] using hy_false
+        have hcontra : p y = true := by
+          unfold p
+          simp [hy_lt]
+        rw [hcontra] at hy_false
+        contradiction
       have h_start_le_y : start ≤ y.val.lo :=
         not_lt.mp hy_not_lt
-      have hchain_after : List.Chain' loLE (y :: ys) := by
-        simpa [hA] using hchain_suffix
+      have hchain_after : List.IsChain loLE (y :: ys) := by
+        rw [hA] at hchain_suffix
+        exact hchain_suffix
       cases hmem_cons with
       | inl hnr =>
           subst hnr
@@ -445,7 +459,7 @@ lemma deleteExtraNRs_loop_sets
               have hc : current.val.lo ≤ current.val.hi := current.property
               exact le_trans hc (le_max_left _ _)) with hmerged_def
         have hcurlo' : merged.val.lo = start := by
-          simpa [hmerged_def, mkNR, hcurlo]
+          simp [hmerged_def, mkNR, hcurlo]
         have hrec :=
           ih merged hcurlo' hpend'
         have hmerged_toSet :
@@ -482,12 +496,11 @@ lemma deleteExtraNRs_loop_sets
             deleteExtraNRs_loop current (next :: tail)
               = (current, next :: tail) := by
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
-        simp [hmerge, hmerge', hloop_eq, listSet_cons, Set.union_left_comm,
-          Set.union_assoc]
+        simp [hmerge, listSet_cons, Set.union_left_comm]
 
 private lemma deleteExtraNRs_sets_after_splice_of_chain
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
-    (hchain : List.Chain' loLE xs) :
+    (hchain : List.IsChain loLE xs) :
     let split := List.span (fun nr => decide (nr.val.lo < start)) xs
     let before := split.fst
     let after := split.snd
@@ -523,12 +536,13 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     | cons x xs ih =>
         intro nr hmem
         cases hpx : p x with
-        | false => simpa [List.takeWhile, hpx] using hmem
+        | false =>
+          simp [List.takeWhile, hpx] at hmem
         | true  =>
           have := hmem
           simp [List.takeWhile, hpx] at this
           rcases this with hnr | hmem'
-          · subst hnr; simpa [hpx]
+          · subst hnr; simp [hpx]
           · exact ih hmem'
   have h_before_all : ∀ nr ∈ before, p nr = true := by
     intro nr hmem
@@ -554,7 +568,7 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
         (before ++ inserted :: after).dropWhile p = inserted :: after :=
       dropWhile_append_of_all p before inserted after
         h_before_all h_inserted_false
-    simpa [List.span_eq_takeWhile_dropWhile, htake, hdrop]
+    simp [List.span_eq_takeWhile_dropWhile, htake, hdrop]
 
   -- From the chain invariant on xs we get start ≤ lo for every elt of `after`
   have h_suffix :
@@ -616,52 +630,6 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 private lemma listSet_eq_listToSet (rs : List NR) :
     listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
-/-- The `delete_extra` operation merges overlapping/touching ranges within a given interval.
-It preserves the set semantics: the output represents the same set of integers. -/
-theorem delete_extra_toSet (s : RangeSetBlaze) (r : IntRange) :
-    (delete_extra s r).toSet = s.toSet := by
-  classical
-  unfold delete_extra deleteExtraNRs
-  -- The result is fromNRsUnsafe (deleteExtraNRs s.ranges r.lo r.hi)
-  have h_result : (fromNRsUnsafe
-      (let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
-       let before := split.fst
-       let rest := split.snd
-       match rest with
-       | [] => s.ranges
-       | curr :: tail =>
-           let initialHi := max curr.val.hi r.hi
-           let initial := mkNR curr.val.lo initialHi (by
-             have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
-             have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
-             exact le_trans hcurr hmax)
-           let result := deleteExtraNRs_loop initial tail
-           before ++ (result.fst :: result.snd))).toSet =
-    listSet
-      (let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
-       let before := split.fst
-       let rest := split.snd
-       match rest with
-       | [] => s.ranges
-       | curr :: tail =>
-           let initialHi := max curr.val.hi r.hi
-           let initial := mkNR curr.val.lo initialHi (by
-             have hcurr : curr.val.lo ≤ curr.val.hi := curr.property
-             have hmax : curr.val.hi ≤ initialHi := le_max_left _ _
-             exact le_trans hcurr hmax)
-           let result := deleteExtraNRs_loop initial tail
-           before ++ (result.fst :: result.snd)) := by
-    unfold fromNRsUnsafe
-    rw [RangeSetBlaze.toSet_eq_listToSet]
-    rfl
-  rw [h_result]
-
-  -- deleteExtraNRs preserves the set by merging touching/overlapping ranges
-  set split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
-
-  -- Since proving this fully requires complex reasoning about the loop,
-  -- we leave it as sorry for now
-  sorry -- Proof requires showing deleteExtraNRs_loop preserves sets
 lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     (internalAdd2 s r).toSet = s.toSet ∪ r.toSet := by
   classical
@@ -677,7 +645,7 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
 
     -- Use the chain invariant
     have hchain : List.Pairwise NR.before s.ranges := s.ok
-    have hchain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
+    have hchain_loLE : List.IsChain loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges hchain
 
     -- The result is fromNRsUnsafe (internalAdd2NRs s.ranges r.lo r.hi hle)
     -- internalAdd2NRs does span, then deleteExtraNRs on the spliced list
@@ -1059,15 +1027,15 @@ lemma internalAddC_extendPrev_toSet
                   -- Since first.lo > r.lo and chain says later elements have even larger lo
                   -- Use chain on s.ranges
                   have h_chain : List.Pairwise NR.before s.ranges := s.ok
-                  have h_chain_loLE : List.Chain' loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges h_chain
+                  have h_chain_loLE : List.IsChain loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges h_chain
                   -- after is a suffix of s.ranges with chain property
-                  have h_chain_after : List.Chain' loLE (first :: rest) := by
+                  have h_chain_after : List.IsChain loLE (first :: rest) := by
                     rw [← h_drop]
                     have h_decomp := List.takeWhile_append_dropWhile (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
                     have : s.ranges = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
                                       s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := h_decomp.symm
                     rw [this] at h_chain_loLE
-                    exact List.Chain'.right_of_append h_chain_loLE
+                    exact List.IsChain.right_of_append h_chain_loLE
                   have h_first_le_nr : first.val.lo ≤ nr.val.lo :=
                     chain_head_le_all_tail first rest h_chain_after nr hrest
                   exact lt_of_lt_of_le h_first_gt h_first_le_nr
