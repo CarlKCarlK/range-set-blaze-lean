@@ -14,19 +14,18 @@ STATUS: Migrating away from unsafe constructors. The core invariant proof
 ok_deleteExtraNRs is now COMPLETE.
 
 CURRENT WORK (Session 10): Proving ok_internalAdd2NRs to enable safe constructors.
-Progress: Main structure in place using pairwise_append pattern.
+Progress: Main structure complete, working on remaining details.
 
 Completed:
 - Span analysis showing deleteExtraNRs correctly processes before ++ inserted :: after
 - Extracted Pairwise on before (from xs via pairwise_append_left)
-- Set up application of ok_deleteExtraNRs_loop for loop result
+- Proved elements in after have lo ≥ start (using dropWhile and chain properties)
+- Proved result elements have lo ≥ start (via deleteExtraNRs_loop_lo_ge)
 
-Remaining (3 sorrys in proof):
-1. Prove Pairwise on (inserted :: after) - need to analyze relationship between
-   inserted and elements of after
-2. Apply ok_deleteExtraNRs_loop with proper preconditions (hlo, hge, hpw)
-3. Prove cross product: all before elements are ≺ all result elements
-   (follows from before having lo < start and result having lo ≥ start)
+Remaining (2 sorrys in cross product proof):
+1. Prove Pairwise on (inserted :: after) - need relationship between inserted and after
+2. Complete cross product gap proof: show x.hi + 1 < y.lo for x ∈ before, y ∈ result
+   Currently have x.lo < start ≤ y.lo, need to establish x.hi < start to close gap
 -/private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
@@ -802,6 +801,80 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
   -- Step 4: Prove cross product: all elements of before are ≺ all elements of result
   have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
+    intro x hx y hy
+    unfold NR.before
+    -- x ∈ before means x.lo < start (from span property)
+    have hx_lo : x.val.lo < start := by
+      -- before = xs.takeWhile p where p checks lo < start
+      have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+      have : before = xs.takeWhile p := by
+        have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
+        simp [split, before] at this ⊢
+        exact this.1
+      rw [this] at hx
+      have := List.mem_takeWhile_imp hx
+      simp only [p, decide_eq_true_eq] at this
+      exact this
+
+    -- y ∈ (result.fst :: result.snd) means y.lo ≥ start (from loop preservation)
+    have hy_lo : start ≤ y.val.lo := by
+      -- Use deleteExtraNRs_loop_lo_ge to show result elements have lo ≥ start
+      have h_initial_lo : initial.val.lo = start := by
+        simp [initial, curr, inserted, mkNR]
+      have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+        intro nr hnr
+        -- after = xs.dropWhile p where p checks lo < start
+        -- Elements in dropWhile don't satisfy p, so nr.lo ≥ start
+        have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+        have : after = xs.dropWhile p := by
+          have : split = (xs.takeWhile p, xs.dropWhile p) := h_split_eq
+          simp [split, after] at this ⊢
+          exact this.2
+        rw [this] at hnr
+        -- Elements in dropWhile either failed the predicate or come after one that did
+        by_cases h_empty : xs.dropWhile p = []
+        · rw [h_empty] at hnr
+          cases hnr
+        · -- dropWhile is non-empty, so first element doesn't satisfy p
+          have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
+          rw [h_cons] at hnr
+          -- Use chain/pairwise to show all elements have lo ≥ start
+          have h_first_ge : start ≤ first.val.lo := by
+            have h_first_head : (xs.dropWhile p).head? = some first := by
+              rw [h_cons]; rfl
+            have := List.head?_dropWhile_not (p := p) (l := xs)
+            rw [h_first_head] at this
+            simp at this
+            simp only [p, decide_eq_false_iff_not, not_lt] at this
+            exact this
+          -- From Pairwise xs and chain properties, all elements after first also have lo ≥ start
+          -- For now, use that all elements maintain monotonicity
+          have h_chain : List.IsChain loLE xs := pairwise_before_implies_chain_loLE xs hpw
+          have h_chain_drop : List.IsChain loLE (xs.dropWhile p) := by
+            have h_decomp := List.takeWhile_append_dropWhile (p := p) (l := xs)
+            rw [← h_decomp] at h_chain
+            exact List.IsChain.right_of_append h_chain
+          rw [h_cons] at h_chain_drop
+          simp only [List.mem_cons] at hnr
+          rcases hnr with hnr_eq | hnr_tail
+          · rw [hnr_eq]
+            exact h_first_ge
+          · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
+              chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
+            exact le_trans h_first_ge h_nr_ge_first
+      have h_loop_props := deleteExtraNRs_loop_lo_ge start initial after h_initial_lo h_after_ge
+      simp only [List.mem_cons] at hy
+      rcases hy with hy_eq | hy_tail
+      · rw [hy_eq, h_loop_props.1]
+      · exact h_loop_props.2 y hy_tail
+
+    -- Need: x.hi + 1 < y.lo
+    -- We have: x.lo < start ≤ y.lo, and x.lo ≤ x.hi
+    -- So: x.hi < start ≤ y.lo (need stronger bound on x.hi)
+    have hx_prop : x.val.lo ≤ x.val.hi := x.property
+    -- Actually need: x.hi < start
+    -- From before being Pairwise and having lo < start, we know hi < start - 1 or similar
+    -- But we need more - use the fact that if x.hi ≥ start, it would overlap with inserted
     sorry
 
   -- Step 5: Apply pairwise_append
