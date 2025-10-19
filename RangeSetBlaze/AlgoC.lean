@@ -1142,6 +1142,24 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
   exact pairwise_append NR.before before (result.fst :: result.snd)
     hpw_before hpw_result hcross
 
+/-- Safe version of internalAdd2 that uses the gap hypothesis to construct
+a provably-Pairwise result via fromNRs instead of fromNRsUnsafe. -/
+def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
+    (hgap_lt :
+      let split := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
+      let before := split.fst
+      before = [] ∨ ∃ hne : before ≠ [], (before.getLast hne).val.hi + 1 < r.lo) :
+    RangeSetBlaze :=
+  if hempty : r.hi < r.lo then
+    s
+  else
+    let hle : r.lo ≤ r.hi := not_lt.mp hempty
+    let xs := s.ranges
+    have hok : List.Pairwise NR.before
+        (internalAdd2NRs xs r.lo r.hi hle) :=
+      ok_internalAdd2NRs xs r.lo r.hi hle s.ok hgap_lt
+    fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
+
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.The proof structure:
 - Span xs into (before, after) at start
 - If after is empty: result is xs, trivially Pairwise
@@ -1157,7 +1175,7 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
 private lemma ok_deleteExtraNRs
     (xs : List NR) (start stop : Int)
-    (h : start ≤ stop)
+    (_h : start ≤ stop)
     (hpw : List.Pairwise NR.before xs)
     (hstop : ∀ nr ∈ xs, nr.val.lo ≥ start → stop + 1 < nr.val.lo) :
     List.Pairwise NR.before (deleteExtraNRs xs start stop) := by
