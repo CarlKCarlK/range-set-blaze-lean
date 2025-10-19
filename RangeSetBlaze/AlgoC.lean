@@ -10,9 +10,14 @@ open scoped IntRange.NR
 `Algo C` reimplementation that mirrors the production Rust insertion logic
 while operating directly on the `NR` and `RangeSetBlaze` structures.
 
-STATUS: Migrating away from unsafe constructors. The `ok` invariant proofs
-are in progress (see ok_deleteExtraNRs_loop and ok_deleteExtraNRs below).
-Once complete, fromNRsUnsafe will be replaced with fromNRs throughout.
+STATUS: Migrating away from unsafe constructors. The core invariant proof
+ok_deleteExtraNRs is now COMPLETE. Next step: replace fromNRsUnsafe with fromNRs
+at call sites, providing the necessary precondition proofs.
+
+Note: ok_deleteExtraNRs requires precondition:
+  ∀ nr ∈ xs, nr.val.lo ≥ start → stop + 1 < nr.val.lo
+This holds when inserting a range [start, stop] into a Pairwise list where
+elements with lo ≥ start are properly separated.
 -/
 
 private def mkNRUnsafe (lo hi : Int) : NR :=
