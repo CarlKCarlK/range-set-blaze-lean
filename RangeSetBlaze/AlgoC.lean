@@ -681,6 +681,71 @@ private lemma ok_deleteExtraNRs_loop
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge
         simp [h_loop_eq, hpw]
 
+/-- Weak variant: we only assume `Pairwise pending` and `start ≤ lo` on `pending`.
+It shows the loop output is `Pairwise`, even if `current` may overlap `pending.head`. -/
+private lemma ok_deleteExtraNRs_loop_weak
+    (start : Int)
+    (current : NR) (pending : List NR)
+    (hlo  : current.val.lo = start)
+    (hge  : ∀ nr ∈ pending, start ≤ nr.val.lo)
+    (hpwP : List.Pairwise NR.before pending) :
+    List.Pairwise NR.before
+      (let res := deleteExtraNRs_loop current pending; res.fst :: res.snd) := by
+  induction pending generalizing current with
+  | nil =>
+      simp [deleteExtraNRs_loop]
+  | cons next tail ih =>
+      by_cases hmerge : next.val.lo ≤ current.val.hi + 1
+      · -- MERGE: recurse on (merged, tail)
+        set merged :=
+          mkNR current.val.lo (max current.val.hi next.val.hi)
+            (by have := current.property; exact le_trans this (le_max_left _ _))
+        have hge' : ∀ nr ∈ tail, start ≤ nr.val.lo := by
+          intro nr h; exact hge nr (by simp [h])
+        have hpw_tail : List.Pairwise NR.before tail := by
+          cases hpwP with
+          | cons _ htail => exact htail
+        have hmerged_lo : merged.val.lo = start := by
+          simp [merged, mkNR, hlo]
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) = deleteExtraNRs_loop merged tail := by
+          exact deleteExtraNRs_loop_cons_merge current next tail hmerge
+        simp only [h_loop_eq]
+        exact ih merged hmerged_lo hge' hpw_tail
+      · -- NO MERGE: loop returns (current, next :: tail)
+        have h_loop_eq : deleteExtraNRs_loop current (next :: tail) = (current, next :: tail) := by
+          exact deleteExtraNRs_loop_cons_noMerge current next tail hmerge
+        simp only [h_loop_eq]
+        -- we need: current ≺ next and for all z∈tail, current ≺ z
+        have h_head : NR.before current next := by
+          unfold NR.before; simpa using (not_le.mp hmerge)
+        -- For z ∈ tail, use chain order from `Pairwise pending`
+        have hchain : List.IsChain loLE (next :: tail) :=
+          pairwise_before_implies_chain_loLE (next :: tail) (by
+            cases hpwP with
+            | cons hx htail => exact List.Pairwise.cons hx htail)
+        have hnext_le : ∀ z ∈ tail, next.val.lo ≤ z.val.lo :=
+          chain_head_le_all_tail next tail hchain
+        have h_current_tail : ∀ z ∈ tail, NR.before current z := by
+          intro z hz
+          have : current.val.hi + 1 < next.val.lo := by simpa [NR.before] using h_head
+          have : current.val.hi + 1 < z.val.lo := lt_of_lt_of_le this (hnext_le z hz)
+          simpa [NR.before] using this
+        have hpw_tail : List.Pairwise NR.before tail := by
+          cases hpwP with
+          | cons _ htail => exact htail
+        -- Construct Pairwise (current :: next :: tail)
+        constructor
+        · intro b hb
+          simp only [List.mem_cons] at hb
+          rcases hb with rfl | hb
+          · exact h_head
+          · exact h_current_tail b hb
+        · constructor
+          · intro b hb
+            cases hpwP with
+            | cons hx _ => exact hx b hb
+          · exact hpw_tail
+
 /-- If dropWhile returns a non-empty list, the first element doesn't satisfy the predicate. -/
 private lemma dropWhile_head_not_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α) (xs' : List α)
     (h : xs.dropWhile p = x :: xs') :
@@ -801,58 +866,40 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
     rw [h_xs_decomp] at hpw
     exact pairwise_append_left NR.before before after hpw
 
-  -- Step 2: Get Pairwise on (inserted :: after)
-  have hpw_inserted_after : List.Pairwise NR.before (inserted :: after) := by
-    -- Need to show: for all nr ∈ after, inserted ≺ nr, and after is Pairwise
-    constructor
-    · -- Show: ∀ nr ∈ after, NR.before inserted nr (i.e., inserted.hi + 1 < nr.lo)
-      intro nr hnr
-      unfold NR.before
-      -- inserted.hi = stop, so need stop + 1 < nr.lo
-      simp [inserted, mkNR]
-      -- nr ∈ after means nr.lo ≥ start (from dropWhile)
-      -- But we need nr.lo > stop, which requires additional constraints
-      -- The key: if nr.lo ≤ stop, then deleteExtraNRs would merge them
-      -- So for the list to be well-formed after deleteExtraNRs, we need nr.lo > stop
-      -- Actually, this isn't something we can prove without more constraints!
-      -- The issue: internalAdd2NRs CAN insert overlapping ranges
-      -- That's what deleteExtraNRs is designed to handle
-      -- So this approach won't work - need to rethink the proof strategy
-      sorry
-    · -- Show: after is Pairwise
-      have h_xs_decomp : xs = before ++ after := by
-        have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-        calc xs
-          _ = xs.takeWhile p ++ xs.dropWhile p := by
-            exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
-          _ = before ++ after := by
-            have h1 : before = xs.takeWhile p := by
-              have : split = (xs.takeWhile p, xs.dropWhile p) := this
-              simp [split, before] at this ⊢
-              exact this.1
-            have h2 : after = xs.dropWhile p := by
-              have : split = (xs.takeWhile p, xs.dropWhile p) :=
-                List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
-              simp [split, after] at this ⊢
-              exact this.2
-            rw [h1, h2]
-      rw [h_xs_decomp] at hpw
-      -- Extract Pairwise on after
-      revert hpw
-      induction before with
-      | nil => intro hpw; exact hpw
-      | cons x xs ih =>
-          intro hpw
-          cases hpw with
-          | cons _ hrest => exact ih hrest
+  -- Step 2: Extract Pairwise on after
+  have hpw_after : List.Pairwise NR.before after := by
+    have h_xs_decomp : xs = before ++ after := by
+      have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+      calc xs
+        _ = xs.takeWhile p ++ xs.dropWhile p := by
+          exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
+        _ = before ++ after := by
+          have h1 : before = xs.takeWhile p := by
+            have : split = (xs.takeWhile p, xs.dropWhile p) := this
+            simp [split, before] at this ⊢
+            exact this.1
+          have h2 : after = xs.dropWhile p := by
+            have : split = (xs.takeWhile p, xs.dropWhile p) :=
+              List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+            simp [split, after] at this ⊢
+            exact this.2
+          rw [h1, h2]
+    rw [h_xs_decomp] at hpw
+    -- Extract Pairwise on after
+    revert hpw
+    induction before with
+    | nil => intro hpw; exact hpw
+    | cons x xs ih =>
+        intro hpw
+        cases hpw with
+        | cons _ hrest => exact ih hrest
 
-  -- Step 3: Apply ok_deleteExtraNRs_loop to get Pairwise on (result.fst :: result.snd)
+  -- Step 3: Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (result.fst :: result.snd)
+  -- The weak version only requires Pairwise on `after`, not on (initial :: after)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
-    -- Need to apply ok_deleteExtraNRs_loop with preconditions
     have h_initial_lo : initial.val.lo = start := by
       simp [initial, curr, inserted, mkNR]
     have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
-      -- Already proved in the cross product section, extract it
       intro nr hnr
       have h_split_eq := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
       have : after = xs.dropWhile p := by
@@ -883,17 +930,8 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
         · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
             chain_head_le_all_tail first rest h_chain_drop nr hnr_tail
           exact le_trans h_first_ge h_nr_ge_first
-    -- Now apply ok_deleteExtraNRs_loop
-    -- Note: initial = inserted (from h_initial_eq), so Pairwise (initial :: after) = Pairwise (inserted :: after)
-    have hpw_initial_after : List.Pairwise NR.before (initial :: after) := by
-      have : initial = inserted := by
-        calc initial
-          _ = mkNR curr.val.lo initialHi (le_trans hcurr hmax_prop) := rfl
-          _ = mkNR start stop h_le := h_initial_eq
-          _ = inserted := rfl
-      rw [this]
-      exact hpw_inserted_after
-    exact ok_deleteExtraNRs_loop start initial after h_initial_lo h_after_ge hpw_initial_after
+    -- Apply the weak loop lemma - doesn't require Pairwise (initial :: after)
+    exact ok_deleteExtraNRs_loop_weak start initial after h_initial_lo h_after_ge hpw_after
 
   -- Step 4: Prove cross product: all elements of before are ≺ all elements of result
   have hcross : ∀ x ∈ before, ∀ y ∈ (result.fst :: result.snd), NR.before x y := by
@@ -965,15 +1003,17 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
       · exact h_loop_props.2 y hy_tail
 
     -- Need: x.hi + 1 < y.lo
-    -- We have: x.lo < start ≤ y.lo, and x.lo ≤ x.hi
-    -- So: x.hi < start ≤ y.lo (need stronger bound on x.hi)
-    have hx_prop : x.val.lo ≤ x.val.hi := x.property
-    -- Actually need: x.hi < start
-    -- From before being Pairwise and having lo < start, we know hi < start - 1 or similar
-    -- But we need more - use the fact that if x.hi ≥ start, it would overlap with inserted
-    sorry
-
-  -- Step 5: Apply pairwise_append
+    -- We have: x.lo < start ≤ y.lo
+    -- Need to prove: x.hi + 1 < start or more generally x.hi + 1 < y.lo
+    -- From Pairwise xs: if before and after are both non-empty,
+    -- last of before ≺ first of after, and first_after.lo ≥ start
+    -- For general x ∈ before: by chain/transitivity, x.hi < first_after.lo
+    -- Since y.lo ≥ start and first_after.lo ≥ start,
+    -- and result preserves lo ≥ start, we have x.hi + 1 < first_after.lo ≤ something
+    -- This requires a careful analysis of the relationship between before, after, and result
+    -- Deferred: this cross product proof is complex and requires handling edge cases
+    -- (empty after, last element of before, etc.)
+    sorry  -- Step 5: Apply pairwise_append
   exact pairwise_append NR.before before (result.fst :: result.snd)
     hpw_before hpw_result hcross
 
