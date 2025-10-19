@@ -1254,9 +1254,62 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
             by_cases h_eq : nr = x
             · rw [h_eq]; exact hx_lt
             · -- If nr ≠ x, then nr appears before x in the list
-              -- Since s.ranges is Pairwise NR.before and x is the last in before_le,
-              -- we have nr.hi < x.lo, so nr.lo ≤ nr.hi < x.lo < r.lo
-              sorry
+              -- Since s.ranges is Pairwise (· ≺ ·) and x is the last in before_le,
+              -- we have nr.val.hi + 1 < x.val.lo, so nr.lo ≤ nr.hi < x.lo < r.lo
+
+              -- First establish that before_le equals the takeWhile result
+              have before_le_eq : before_le = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+                unfold before_le split_le
+                simp only [List.span_eq_takeWhile_dropWhile]
+
+              -- Decompose before_le as init ++ [x]
+              have h_decomp : ∃ init, before_le = init ++ [x] := by
+                use before_le.dropLast
+                exact (List.dropLast_append_getLast hne_le).symm
+              obtain ⟨init, h_init⟩ := h_decomp
+
+              -- nr is in init (since nr ∈ before_le and nr ≠ x)
+              have hnr_init : nr ∈ init := by
+                have hnr_before : nr ∈ before_le := by rw [before_le_eq]; exact hnr
+                rw [h_init] at hnr_before
+                simp at hnr_before
+                cases hnr_before with
+                | inl h => exact h
+                | inr h => exact absurd h h_eq
+
+              -- Get Pairwise property on s.ranges, then restrict to takeWhile
+              have h_pw_take : List.Pairwise (· ≺ ·) (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
+                have h_decomp : s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
+                                s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) = s.ranges :=
+                  List.takeWhile_append_dropWhile
+                have h_ok_decomp : List.Pairwise (· ≺ ·) (s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
+                                                           s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo))) := by
+                  rw [h_decomp]; exact s.ok
+                exact pairwise_append_left (· ≺ ·) _ _ h_ok_decomp
+
+              -- Now apply it to before_le
+              have h_pw_before : List.Pairwise (· ≺ ·) before_le := by
+                rw [before_le_eq]
+                exact h_pw_take
+
+              -- Apply pairwise_prefix_last
+              rw [h_init] at h_pw_before
+              have h_before : nr ≺ x := by
+                exact pairwise_prefix_last (· ≺ ·) init x h_pw_before nr hnr_init
+
+              -- Unfold the definition of ≺
+              have : nr.val.hi + 1 < x.val.lo := h_before
+
+              calc nr.val.lo
+                _ ≤ nr.val.hi := nr.property
+                _ < nr.val.hi + 1 := by omega
+                _ < x.val.lo := this
+                _ < r.lo := hx_lt
+
+          -- Now prove the two takeWhile results are equal
+          -- Key insight: every element in takeWhile (≤ r.lo) also satisfies (< r.lo)
+          -- So takeWhile (< r.lo) consumes at least as much
+          -- And it can't consume more (because < is stronger than ≤)
           sorry
 
         -- Provide the gap witness
