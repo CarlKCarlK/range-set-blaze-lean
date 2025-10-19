@@ -767,7 +767,73 @@ lemma internalAddC_extendPrev_toSet
 
   -- Show that extended.toSet = prev.toSet ∪ r.toSet when ¬h_gap and prev.hi < r.hi
   have h_extended_covers : extended.val.toSet = prev.val.toSet ∪ r.toSet := by
-    sorry
+    -- extended = mkNR prev.lo r.hi, so extended.toSet = Set.Icc prev.lo r.hi
+    -- prev.toSet = Set.Icc prev.lo prev.hi
+    -- r.toSet = Set.Icc r.lo r.hi
+    -- Need to show: Set.Icc prev.lo r.hi = Set.Icc prev.lo prev.hi ∪ Set.Icc r.lo r.hi
+
+    have h_extended_def : extended.val.toSet = Set.Icc prev.val.lo r.hi := by
+      simp [extended, mkNR, IntRange.toSet]
+
+    have h_prev_def : prev.val.toSet = Set.Icc prev.val.lo prev.val.hi := by
+      simp [IntRange.toSet]
+
+    have h_r_def : r.toSet = Set.Icc r.lo r.hi := by
+      simp [IntRange.toSet]
+
+    rw [h_extended_def, h_prev_def, h_r_def]
+
+    -- Key fact: ¬h_gap means prev.hi + 1 ≥ r.lo, so r.lo ≤ prev.hi + 1
+    have h_r_lo_bound : r.lo ≤ prev.val.hi + 1 := le_of_not_gt h_gap
+
+    -- Since h_extend: prev.hi < r.hi, we have prev.hi ≤ r.hi
+    have h_prev_hi_le_r_hi : prev.val.hi ≤ r.hi := le_of_lt h_extend
+
+    -- Also, from the chain invariant and getLast, prev.lo ≤ r.lo
+    -- (This follows from the fact that prev is in the "before" part of the span)
+    have h_prev_lo_le_r_lo : prev.val.lo ≤ r.lo := by
+      -- prev is in takeWhile (nr.lo ≤ r.lo), so prev.lo ≤ r.lo
+      have h_prev_in_before : prev ∈ before := by
+        have ⟨ys, h_decomp⟩ := List.getLast?_eq_some_iff.mp h_getLast
+        rw [h_decomp]
+        simp
+      have h_before_takeWhile : before = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+        have h_span := List.span_eq_takeWhile_dropWhile
+          (p := fun nr => decide (nr.val.lo ≤ r.lo)) (l := s.ranges)
+        calc before
+          _ = split.fst := rfl
+          _ = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := rfl
+          _ = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := congrArg Prod.fst h_span
+      rw [h_before_takeWhile] at h_prev_in_before
+      have := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_in_before
+      simp at this
+      exact this
+
+    -- Show the union equals the extended interval
+    apply Set.ext
+    intro x
+    constructor
+    · intro hx
+      -- x ∈ Set.Icc prev.lo r.hi → x ∈ Set.Icc prev.lo prev.hi ∪ Set.Icc r.lo r.hi
+      simp [Set.Icc] at hx ⊢
+      rcases hx with ⟨hx_lo, hx_hi⟩
+      by_cases h : x ≤ prev.val.hi
+      · left
+        exact ⟨hx_lo, h⟩
+      · right
+        have hx_gt_prev : prev.val.hi < x := lt_of_not_ge h
+        have hx_ge_r_lo : r.lo ≤ x := by
+          have : prev.val.hi + 1 ≤ x := (Int.add_one_le_iff).2 hx_gt_prev
+          exact le_trans h_r_lo_bound this
+        exact ⟨hx_ge_r_lo, hx_hi⟩
+    · intro hx
+      -- x ∈ Set.Icc prev.lo prev.hi ∪ Set.Icc r.lo r.hi → x ∈ Set.Icc prev.lo r.hi
+      simp [Set.Icc] at hx ⊢
+      rcases hx with ⟨hx_lo, hx_hi⟩ | ⟨hx_lo, hx_hi⟩
+      · -- x ∈ [prev.lo, prev.hi]
+        exact ⟨hx_lo, le_trans hx_hi h_prev_hi_le_r_hi⟩
+      · -- x ∈ [r.lo, r.hi]
+        exact ⟨le_trans h_prev_lo_le_r_lo hx_lo, hx_hi⟩
 
   sorry
 
