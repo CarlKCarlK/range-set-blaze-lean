@@ -19,19 +19,23 @@ COMPLETED (Session 10):
 - ok_internalAdd2NRs: COMPLETE with gap hypothesis (either before = [] or last has gap < start)
 - all_before_strict_before_start: Helper to propagate gap to all elements
 
+COMPLETED (Session 11):
+- Fixed unused variable warning in ok_deleteExtraNRs
+- Created internalAdd2_safe: Safe wrapper using ok_internalAdd2NRs with fromNRs
+- Moved internalAddC definition to after internalAdd2_safe (line 1134)
+
 The gap hypothesis in ok_internalAdd2NRs matches the actual call sites in internalAddC:
   - none case: before = [] (gap holds vacuously)
   - some prev with gap: prev.val.hi + 1 < start (gap provided directly)
 
 NEXT STEPS:
 To replace fromNRsUnsafe with fromNRs in internalAdd2/internalAddC:
-1. Note predicate mismatch: internalAddC uses (≤ start), internalAdd2NRs uses (< start)
-2. Options:
-   a) Unify the predicates (make both use < or both use ≤)
-   b) Prove a bridging lemma showing the gap transfers between predicates
-   c) Inline internalAdd2NRs directly into internalAddC branches where gap is known
-3. Once predicates match, apply ok_internalAdd2NRs to prove Pairwise invariant
-4. Replace fromNRsUnsafe with fromNRs using the proven invariant
+1. Predicate mismatch: internalAddC uses (≤ start), internalAdd2_safe expects (< start)
+2. Need two bridging lemmas:
+   a) Show (≤ start) empty implies (< start) empty for none branch
+   b) Show prev last of (≤ start) with gap implies prev last of (< start) with gap
+3. Wire internalAdd2_safe into both call sites in internalAddC (lines ~1147, ~1152)
+4. Once wired, prove ok_internalAddC to show Pairwise preservation end-to-end
 
 Current unsafe constructors (to eventually remove):
 - mkNRUnsafe (line 39): Creates NR without proof
@@ -188,35 +192,6 @@ def internalAdd2 (s : RangeSetBlaze) (internalRange : IntRange) :
   else
     let hle : start ≤ stop := not_lt.mp h
     fromNRsUnsafe (internalAdd2NRs s.ranges start stop hle)
-
-def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
-  let start := r.lo
-  let stop := r.hi
-  if _hstop : stop < start then
-    s
-  else
-    let xs := s.ranges
-    let split := List.span (fun nr => decide (nr.val.lo <= start)) xs
-    let before := split.fst
-    let after := split.snd
-    match List.getLast? before with
-    | none =>
-        internalAdd2 s r
-    | some prev =>
-        if decide (prev.val.hi + 1 < start) then
-          internalAdd2 s r
-        else
-          if h_lt : prev.val.hi < stop then
-            have h_nonempty : prev.val.lo ≤ prev.val.hi := prev.property
-            have h_le : prev.val.hi ≤ stop := le_of_lt h_lt
-            have hle : prev.val.lo ≤ stop := le_trans h_nonempty h_le
-            let extendedList :=
-              List.dropLast before ++ (mkNR prev.val.lo stop hle :: after)
-            let mergedSet := fromNRsUnsafe extendedList
-            let target : IntRange := { lo := prev.val.lo, hi := stop }
-            delete_extra mergedSet target
-          else
-            s
 
 open Classical
 open IntRange
@@ -1159,6 +1134,35 @@ def internalAdd2_safe (s : RangeSetBlaze) (r : IntRange)
         (internalAdd2NRs xs r.lo r.hi hle) :=
       ok_internalAdd2NRs xs r.lo r.hi hle s.ok hgap_lt
     fromNRs (internalAdd2NRs xs r.lo r.hi hle) hok
+
+def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
+  let start := r.lo
+  let stop := r.hi
+  if _hstop : stop < start then
+    s
+  else
+    let xs := s.ranges
+    let split := List.span (fun nr => decide (nr.val.lo <= start)) xs
+    let before := split.fst
+    let after := split.snd
+    match List.getLast? before with
+    | none =>
+        internalAdd2 s r
+    | some prev =>
+        if decide (prev.val.hi + 1 < start) then
+          internalAdd2 s r
+        else
+          if h_lt : prev.val.hi < stop then
+            have h_nonempty : prev.val.lo ≤ prev.val.hi := prev.property
+            have h_le : prev.val.hi ≤ stop := le_of_lt h_lt
+            have hle : prev.val.lo ≤ stop := le_trans h_nonempty h_le
+            let extendedList :=
+              List.dropLast before ++ (mkNR prev.val.lo stop hle :: after)
+            let mergedSet := fromNRsUnsafe extendedList
+            let target : IntRange := { lo := prev.val.lo, hi := stop }
+            delete_extra mergedSet target
+          else
+            s
 
 /-- Invariant preservation: `deleteExtraNRs` maintains `Pairwise NR.before`.The proof structure:
 - Span xs into (before, after) at start
