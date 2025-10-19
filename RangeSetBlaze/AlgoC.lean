@@ -13,21 +13,29 @@ while operating directly on the `NR` and `RangeSetBlaze` structures.
 STATUS: Migrating away from unsafe constructors. The core invariant proof
 ok_deleteExtraNRs is now COMPLETE.
 
-CURRENT WORK (Session 10): Proving ok_internalAdd2NRs to enable safe constructors.
-Progress: Nearly complete - only 2 sorrys remaining in the proof.
+CURRENT WORK (Session 10): Proving ok_internalAdd2NRs - encountered fundamental issue.
 
-Completed:
+Progress made:
 - Span analysis showing deleteExtraNRs correctly processes before ++ inserted :: after
 - Extracted Pairwise on before (from xs via pairwise_append_left)
 - Proved elements in after have lo ≥ start (using dropWhile and chain properties)
 - Proved result elements have lo ≥ start (via deleteExtraNRs_loop_lo_ge)
 - Applied ok_deleteExtraNRs_loop to prove result is Pairwise (Step 3 complete!)
+- Proved after itself is Pairwise (extracted from xs)
 
-Remaining (2 sorrys):
-1. Prove Pairwise on (inserted :: after) - needed as precondition for loop
-   This requires showing inserted.hi + 1 < first_of_after.lo when after is non-empty
-2. Complete cross product gap proof: show x.hi + 1 < y.lo for x ∈ before, y ∈ result
-   Need to establish x.hi < start to close gap (have x.lo < start ≤ y.lo already)
+BLOCKER DISCOVERED:
+The current proof approach requires proving Pairwise on (inserted :: after),
+which means showing inserted.hi + 1 < first_of_after.lo. However, this is NOT
+provable in general! The inserted range [start, stop] can overlap with elements
+in after - that's exactly what deleteExtraNRs is designed to handle via merging.
+
+Possible resolutions:
+1. Add precondition that inserted doesn't overlap (but defeats purpose of deleteExtraNRs)
+2. Prove a weaker version of ok_deleteExtraNRs_loop that handles non-Pairwise input
+3. Restructure proof to directly analyze deleteExtraNRs without using the loop lemma
+4. Show that even with overlaps, the output is still Pairwise (different approach)
+
+Current approach may need fundamental rethinking.
 -/private def mkNRUnsafe (lo hi : Int) : NR :=
   Subtype.mk { lo := lo, hi := hi } (by sorry)
 
@@ -795,7 +803,48 @@ private lemma ok_internalAdd2NRs (xs : List NR) (start stop : Int) (h_le : start
 
   -- Step 2: Get Pairwise on (inserted :: after)
   have hpw_inserted_after : List.Pairwise NR.before (inserted :: after) := by
-    sorry
+    -- Need to show: for all nr ∈ after, inserted ≺ nr, and after is Pairwise
+    constructor
+    · -- Show: ∀ nr ∈ after, NR.before inserted nr (i.e., inserted.hi + 1 < nr.lo)
+      intro nr hnr
+      unfold NR.before
+      -- inserted.hi = stop, so need stop + 1 < nr.lo
+      simp [inserted, mkNR]
+      -- nr ∈ after means nr.lo ≥ start (from dropWhile)
+      -- But we need nr.lo > stop, which requires additional constraints
+      -- The key: if nr.lo ≤ stop, then deleteExtraNRs would merge them
+      -- So for the list to be well-formed after deleteExtraNRs, we need nr.lo > stop
+      -- Actually, this isn't something we can prove without more constraints!
+      -- The issue: internalAdd2NRs CAN insert overlapping ranges
+      -- That's what deleteExtraNRs is designed to handle
+      -- So this approach won't work - need to rethink the proof strategy
+      sorry
+    · -- Show: after is Pairwise
+      have h_xs_decomp : xs = before ++ after := by
+        have := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+        calc xs
+          _ = xs.takeWhile p ++ xs.dropWhile p := by
+            exact (List.takeWhile_append_dropWhile (p := p) (l := xs)).symm
+          _ = before ++ after := by
+            have h1 : before = xs.takeWhile p := by
+              have : split = (xs.takeWhile p, xs.dropWhile p) := this
+              simp [split, before] at this ⊢
+              exact this.1
+            have h2 : after = xs.dropWhile p := by
+              have : split = (xs.takeWhile p, xs.dropWhile p) :=
+                List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
+              simp [split, after] at this ⊢
+              exact this.2
+            rw [h1, h2]
+      rw [h_xs_decomp] at hpw
+      -- Extract Pairwise on after
+      revert hpw
+      induction before with
+      | nil => intro hpw; exact hpw
+      | cons x xs ih =>
+          intro hpw
+          cases hpw with
+          | cons _ hrest => exact ih hrest
 
   -- Step 3: Apply ok_deleteExtraNRs_loop to get Pairwise on (result.fst :: result.snd)
   have hpw_result : List.Pairwise NR.before (result.fst :: result.snd) := by
