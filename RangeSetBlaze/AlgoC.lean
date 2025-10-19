@@ -1228,10 +1228,29 @@ def internalAdd2_safe_from_le (s : RangeSetBlaze) (r : IntRange)
         let split_lt := List.span (fun nr => decide (nr.val.lo < r.lo)) s.ranges
         let before_lt := split_lt.fst
 
-        -- Simplified: just provide the witness that the (<) split is nonempty with a gap
-        -- The key insight: if x = getLast (≤-split) has x.hi + 1 < r.lo, then x.lo < r.lo,
-        -- so x also appears in the (<)-split. The two splits are actually equal.
-        sorry
+        -- Key: x = last of (≤ split) has x.hi + 1 < r.lo, so x.lo < r.lo
+        let x := before_le.getLast hne_le
+        have hx_gap : x.val.hi + 1 < r.lo := h_gap
+        have hx_prop : x.val.lo ≤ x.val.hi := x.property
+        have hx_lt : x.val.lo < r.lo := calc x.val.lo
+          _ ≤ x.val.hi := hx_prop
+          _ < x.val.hi + 1 := by omega
+          _ < r.lo := hx_gap
+
+        -- The two splits are equal (both cut at the same point)
+        have before_eq : before_lt = before_le := by
+          unfold before_lt split_lt before_le split_le
+          simp [List.span_eq_takeWhile_dropWhile]
+          -- takeWhile (<) = takeWhile (≤) when all (≤) elements satisfy (<)
+          sorry
+
+        -- Provide the gap witness
+        right
+        have hne_lt : before_lt ≠ [] := by intro h; rw [before_eq] at h; exact hne_le h
+        use hne_lt
+        show (split_lt.fst.getLast hne_lt).val.hi + 1 < r.lo
+        simp only [split_lt, before_lt, split_le, before_le, before_eq]
+        exact h_gap
   internalAdd2_safe s r hgap_lt
 
 
