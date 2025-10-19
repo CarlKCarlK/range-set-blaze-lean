@@ -1753,7 +1753,14 @@ lemma internalAddC_extendPrev_toSet
   have h_gap_decide : decide (prev.val.hi + 1 < r.lo) = false := by
     simp [h_gap]
 
-  -- Extend check is true
+  -- Navigate through the match and ifs to reach the extend branch
+  simp [List.span_eq_takeWhile_dropWhile]
+  rw [h_getLast]
+  -- Now we have a match on (some prev)
+  simp only []
+  -- Handle the gap check and extend check
+  rw [if_neg h_gap, dif_pos h_extend]
+
   -- Now we're in: delete_extra (fromNRsUnsafe extendedList) target
   -- where extendedList = dropLast before ++ (extended :: after)
   -- and extended = mkNR prev.lo r.hi ...
@@ -1763,12 +1770,20 @@ lemma internalAddC_extendPrev_toSet
   have h_prev_le : prev.val.lo ≤ prev.val.hi := prev.property
   have h_r_le : prev.val.hi ≤ r.hi := le_of_lt h_extend
   have h_extended_le : prev.val.lo ≤ r.hi := le_trans h_prev_le h_r_le
-  set extended := mkNR prev.val.lo r.hi h_extended_le
-  set extendedList := List.dropLast before ++ (extended :: after)
-  set mergedSet := fromNRsUnsafe extendedList
-  set target : IntRange := { lo := prev.val.lo, hi := r.hi }
+  set extended := mkNR prev.val.lo r.hi h_extended_le with h_extended_def
 
-  -- Unfold delete_extra
+  -- After simp, before became takeWhile, but we need the original before for the proof
+  -- Relate them
+  have h_before_eq : before = List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges := by
+    simp [before, split, List.span_eq_takeWhile_dropWhile]
+
+  set extendedList := List.dropLast before ++ (extended :: after) with h_list_def
+  set mergedSet := fromNRsUnsafe extendedList with h_merged_def
+  set target : IntRange := { lo := prev.val.lo, hi := r.hi } with h_target_def
+
+  -- The goal is now about delete_extra
+  -- Rewrite to use before instead of takeWhile
+  rw [←h_before_eq]
   show (delete_extra mergedSet target).toSet = s.toSet ∪ r.toSet
   unfold delete_extra
 
