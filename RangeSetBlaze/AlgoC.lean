@@ -2272,14 +2272,14 @@ lemma internalAddC_extendPrev_toSet
               -- Just [head, extended] vs [head, prev]
               constructor
               · have := List.IsChain.rel_head hchain_init_prev_after
-                simp [hafter_match] at this
+                simp at this
                 rw [h_extended_lo]
                 exact this
               · constructor
             | cons a as =>
               constructor
               · have := List.IsChain.rel_head hchain_init_prev_after
-                simp [hafter_match] at this
+                simp at this
                 rw [h_extended_lo]
                 exact this
               · constructor
@@ -2446,22 +2446,14 @@ lemma internalAddC_extendPrev_toSet
         constructor
         · simp [h_initial_eq]
         · -- Show the loop preserves the set
-          -- deleteExtraNRs_loop merges adjacent/overlapping ranges
-          -- With our chain property, this preserves the set union
-          -- The loop produces (final, remaining) where final is the merged result
-          -- and remaining is what couldn't be merged
-          -- The set of (final :: remaining) equals the set of the input
+          -- We have: List.IsChain loLE (init ++ (extended :: after))
+          -- Extract the chain property for (extended :: after)
+          have hchain_ext_after : List.IsChain loLE (extended :: after) := by
+            have := List.IsChain.right_of_append (l₁ := init) (l₂ := extended :: after) hchain_init_ext_after
+            exact this
 
-          -- We need: listSet ((deleteExtraNRs_loop extended after).fst :: (deleteExtraNRs_loop extended after).snd)
-          --        = extended.val.toSet ∪ listSet after
-
-          -- This follows from properties of deleteExtraNRs_loop:
-          -- - It preserves set unions when merging
-          -- - With chain property, merges are well-defined
-          -- - The result (fst :: snd) has the same set as (extended :: after)
-
-          -- This is the final technical piece requiring detailed case analysis on the loop
-          sorry
+          -- Apply deleteExtraNRs_loop_preserves_sets
+          exact deleteExtraNRs_loop_preserves_sets extended after hchain_ext_after
 
       obtain ⟨processed, h_result_structure, h_processed_set⟩ := h_deleteExtra_structure
       rw [h_result_structure, listSet_append, h_processed_set]
