@@ -1499,7 +1499,127 @@ private def internalAddC_extendPrev_safe
   let newRanges := init ++ res.fst :: res.snd
   -- Prove Pairwise on newRanges
   have hpw_newRanges : List.Pairwise NR.before newRanges := by
-    sorry -- TODO: Fill in Pairwise proof using ok_deleteExtraNRs_loop_weak
+    -- Extract Pairwise for before from s.ok using span decomposition
+    have hpw_before : List.Pairwise NR.before before := by
+      let p := fun nr : NR => decide (nr.val.lo ≤ start)
+      have h_s_decomp : s.ranges = before ++ after := by
+        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
+        calc s.ranges
+          _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
+          _ = before ++ after := by
+            have h1 : before = s.ranges.takeWhile p := by
+              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
+              simp only [Prod.mk.injEq] at hDecomp
+              exact hDecomp.1.symm
+            have h2 : after = s.ranges.dropWhile p := by
+              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
+              simp only [Prod.mk.injEq] at hDecomp
+              exact hDecomp.2.symm
+            rw [h1, h2]
+      have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
+        rw [← h_s_decomp]; exact s.ok
+      exact pairwise_append_left NR.before before after h_ok_decomp
+
+    -- Extract Pairwise for init using dropLast
+    have hpw_init : List.Pairwise NR.before init := by
+      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
+      have : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
+      rw [heq] at this
+      rw [this] at hpw_before
+      exact pairwise_append_left NR.before init [prev] hpw_before
+
+    -- Extract Pairwise for after from s.ok
+    have hpw_after : List.Pairwise NR.before after := by
+      let p := fun nr : NR => decide (nr.val.lo ≤ start)
+      have h_s_decomp : s.ranges = before ++ after := by
+        have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
+        calc s.ranges
+          _ = s.ranges.takeWhile p ++ s.ranges.dropWhile p := (List.takeWhile_append_dropWhile (p := p) (l := s.ranges)).symm
+          _ = before ++ after := by
+            have h1 : before = s.ranges.takeWhile p := by
+              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
+              simp only [Prod.mk.injEq] at hDecomp
+              exact hDecomp.1.symm
+            have h2 : after = s.ranges.dropWhile p := by
+              rw [List.span_eq_takeWhile_dropWhile] at hDecomp
+              simp only [Prod.mk.injEq] at hDecomp
+              exact hDecomp.2.symm
+            rw [h1, h2]
+      have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
+        rw [← h_s_decomp]; exact s.ok
+      sorry -- TODO: Extract Pairwise on after from h_ok_decomp
+
+    -- Prove extended.val.lo = start
+    have h_extended_lo : extended.val.lo = start := by
+      sorry -- TODO: Prove prev.val.lo = start using span property and hNoGap, then use mkNR definition
+
+    -- Prove ∀ nr ∈ after, start ≤ nr.val.lo
+    have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
+      intro nr hmem
+      have h_after_eq : after = s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ start)) := by
+        rw [List.span_eq_takeWhile_dropWhile] at hDecomp
+        simp only [Prod.mk.injEq] at hDecomp
+        exact hDecomp.2.symm
+      rw [h_after_eq] at hmem
+      by_cases h_empty : s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ start)) = []
+      · rw [h_empty] at hmem; cases hmem
+      · have ⟨first, rest, h_cons⟩ := List.exists_cons_of_ne_nil h_empty
+        rw [h_cons] at hmem
+        have h_first_ge : start < first.val.lo := by
+          let p := fun nr : NR => decide (nr.val.lo ≤ start)
+          have h_first_head : (s.ranges.dropWhile p).head? = some first := by rw [h_cons]; rfl
+          have := List.head?_dropWhile_not (p := p) (l := s.ranges)
+          rw [h_first_head] at this
+          simp only [p] at this
+          simp only [decide_eq_false_iff_not, not_le] at this
+          exact this
+        have h_chain : List.IsChain loLE s.ranges := pairwise_before_implies_chain_loLE s.ranges s.ok
+        have h_chain_drop : List.IsChain loLE (s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ start))) := by
+          have h_decomp : s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ start)) ++ s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ start)) = s.ranges :=
+            List.takeWhile_append_dropWhile
+          rw [← h_decomp] at h_chain
+          exact List.IsChain.right_of_append h_chain
+        rw [h_cons] at h_chain_drop
+        simp only [List.mem_cons] at hmem
+        rcases hmem with rfl | hmem_tail
+        · omega
+        · have h_nr_ge_first : first.val.lo ≤ nr.val.lo :=
+            chain_head_le_all_tail first rest h_chain_drop nr hmem_tail
+          omega
+
+    -- Apply ok_deleteExtraNRs_loop_weak to get Pairwise on (res.fst :: res.snd)
+    have hpw_res : List.Pairwise NR.before (res.fst :: res.snd) :=
+      ok_deleteExtraNRs_loop_weak start extended after h_extended_lo h_after_ge hpw_after
+
+    -- Prove cross-relations from init to (res.fst :: res.snd)
+    have hcross : ∀ x ∈ init, ∀ y ∈ (res.fst :: res.snd), NR.before x y := by
+      intro x hx y hy
+      -- From deleteExtraNRs_loop_lo_ge, y.val.lo ≥ start
+      have h_loop_props := deleteExtraNRs_loop_lo_ge start extended after h_extended_lo h_after_ge
+      have h_y_ge : start ≤ y.val.lo := by
+        simp only [List.mem_cons] at hy
+        cases hy with
+        | inl heq => subst heq; exact le_of_eq h_loop_props.1.symm
+        | inr hmem => exact h_loop_props.2 y hmem
+      -- From pairwise on before, x ≺ prev
+      have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
+      have h_before_decomp : before = init ++ [before.getLast hne'] := (List.dropLast_append_getLast hne').symm
+      rw [heq] at h_before_decomp
+      rw [h_before_decomp] at hpw_before
+      have h_x_before_prev : NR.before x prev := by
+        have hcross_init_prev := pairwise_append_cross NR.before init [prev] hpw_before
+        exact hcross_init_prev x hx prev (by simp)
+      -- Since prev.val.lo = start and x.val.hi + 1 < prev.val.lo
+      have h_prev_lo_eq_start : prev.val.lo = start := by
+        simp only [extended, mkNR] at h_extended_lo
+        exact h_extended_lo
+      have h_x_hi_lt_start : x.val.hi + 1 < start := by
+        rw [← h_prev_lo_eq_start]; exact h_x_before_prev
+      -- Therefore x.val.hi + 1 < start ≤ y.val.lo
+      exact lt_of_lt_of_le h_x_hi_lt_start h_y_ge
+
+    -- Apply pairwise_append to combine
+    exact pairwise_append NR.before init (res.fst :: res.snd) hpw_init hpw_res hcross
 
   fromNRs newRanges hpw_newRanges
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
