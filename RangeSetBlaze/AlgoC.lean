@@ -1975,6 +1975,25 @@ lemma internalAddC_extendPrev_toSet
               _ ≤ x := this
           · exact h_hi
 
+    -- Now we need to relate this to the actual computation
+    -- The computation does: delete_extra (fromNRsUnsafe extendedList) target
+    -- where extendedList = dropLast before ++ [extended] ++ after
+    -- and target = {lo := prev.lo, hi := r.hi}
+
+    -- Strategy to complete this proof:
+    -- 1. Show that s.toSet = listSet before ∪ listSet after (using span decomposition)
+    -- 2. Show that listSet before = listSet init ∪ prev.toSet (using before = init ++ [prev])
+    -- 3. The extended range {prev.lo..r.hi} equals prev.toSet ∪ r.toSet (proven above in h_extended_covers)
+    -- 4. The extended list is: init ++ [extended] ++ after
+    -- 5. Apply deleteExtraNRs_sets_after_splice_of_chain or similar lemma
+    -- 6. The delete_extra operation computes: listSet (deleteExtraNRs extendedList prev.lo r.hi)
+    -- 7. This should equal: listSet init ∪ extended.toSet ∪ listSet after
+    --                     = listSet init ∪ (prev.toSet ∪ r.toSet) ∪ listSet after
+    --                     = (listSet init ∪ prev.toSet ∪ listSet after) ∪ r.toSet
+    --                     = s.toSet ∪ r.toSet
+
+    -- The main challenge is handling the delete_extra wrapper and ensuring the intermediate
+    -- construction through fromNRsUnsafe matches what the lemmas expect.
     sorry
 
 -- Main correctness theorem for internal AddC
