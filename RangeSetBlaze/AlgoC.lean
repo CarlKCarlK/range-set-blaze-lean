@@ -1547,11 +1547,74 @@ private def internalAddC_extendPrev_safe
             rw [h1, h2]
       have h_ok_decomp : List.Pairwise NR.before (before ++ after) := by
         rw [← h_s_decomp]; exact s.ok
-      sorry -- TODO: Extract Pairwise on after from h_ok_decomp
+      -- Extract Pairwise on after by induction on before
+      clear p hDecomp hLast hNoGap hExtend extendedHi extended res newRanges s r start stop hExtendedValid h_s_decomp hne init hpw_before hpw_init prev  -- Clear to avoid capturing in induction hypothesis
+      revert h_ok_decomp
+      induction before with
+      | nil => intro h_ok_decomp; exact h_ok_decomp
+      | cons x xs ih =>
+          intro h_ok_decomp
+          cases h_ok_decomp with
+          | cons _ hrest => exact ih hrest
 
     -- Prove extended.val.lo = start
     have h_extended_lo : extended.val.lo = start := by
-      sorry -- TODO: Prove prev.val.lo = start using span property and hNoGap, then use mkNR definition
+      -- First prove prev.val.lo = start separately
+      have h_prev_lo_eq : prev.val.lo = start := by
+        -- prev.val.lo ≤ start from span property
+        have h_prev_lo_le : prev.val.lo ≤ start := by
+          have ⟨hne', heq⟩ := getLast?_eq_some_getLast hLast
+          have h_prev_in_before : prev ∈ before := by
+            rw [← heq]; exact List.getLast_mem hne'
+          let p := fun nr : NR => decide (nr.val.lo ≤ start)
+          have h_before_eq : before = s.ranges.takeWhile p := by
+            have := List.span_eq_takeWhile_dropWhile (p := p) (l := s.ranges)
+            rw [this] at hDecomp
+            simp only [Prod.mk.injEq] at hDecomp
+            exact hDecomp.1.symm
+          rw [h_before_eq] at h_prev_in_before
+          have := List.mem_takeWhile_imp h_prev_in_before
+          simp only [p, decide_eq_true_eq] at this
+          exact this
+        -- start ≤ prev.val.hi + 1 from hNoGap
+        have h_start_le : start ≤ prev.val.hi + 1 := not_lt.mp hNoGap
+        -- prev.val.lo ≤ prev.val.hi from validity
+        have h_prev_valid : prev.val.lo ≤ prev.val.hi := prev.property
+        -- We have: prev.lo ≤ start and start ≤ prev.hi + 1 and prev.lo ≤ prev.hi
+        -- If prev.lo < start, then since prev.lo ≤ prev.hi, we'd have prev.lo < start
+        -- If also prev.hi < start, then prev.hi + 1 ≤ start, contradicting start ≤ prev.hi + 1
+        -- If prev.hi ≥ start, then prev.lo < start ≤ prev.hi, meaning prev contains start
+        -- But in a range [lo, hi], if lo < start ≤ hi, then the range overlaps with [start, ∞)
+        -- This would mean prev.val.lo < r.lo ≤ prev.val.hi, so prev overlaps with r
+        -- The only way to avoid contradiction is prev.lo = start
+        by_contra h_ne
+        have h_lt : prev.val.lo < start := Ne.lt_of_le h_ne h_prev_lo_le
+        -- Case split on whether prev.hi < start
+        by_cases h_prev_hi_lt : prev.val.hi < start
+        · -- If prev.hi < start, then prev.hi + 1 ≤ start
+          have h1 : prev.val.hi + 1 ≤ start := Int.add_one_le_of_lt h_prev_hi_lt
+          -- But we have start ≤ prev.hi + 1, so start = prev.hi + 1
+          have h2 : start ≤ prev.val.hi + 1 := h_start_le
+          have : start = prev.val.hi + 1 := le_antisymm h2 h1
+          -- So prev.lo < prev.hi + 1 = start, giving prev.lo ≤ prev.hi < start
+          -- This means prev.lo < start and prev.hi < start
+          -- From prev.lo ≤ prev.hi and prev.hi < start, we get prev.lo < start (which we have)
+          -- There's no direct contradiction here! The issue is different.
+          -- Actually wait: if prev.hi < start and prev is the last with lo ≤ start,
+          -- and we have prev.lo < start, this is consistent.
+          -- The constraint from hNoGap is: ¬(prev.hi + 1 < start), i.e., start ≤ prev.hi + 1
+          -- We showed start = prev.hi + 1, so start = prev.hi + 1
+          -- But prev.hi < start means prev.hi < prev.hi + 1, which is true!
+          -- So there's no contradiction in this branch. The proof strategy is wrong.
+          -- Let me reconsider: the claim is prev.lo = start. We have prev.lo ≤ start.
+          -- Actually, I think the right approach is simpler. Let me restart.
+          sorry
+        · -- If ¬(prev.hi < start), then start ≤ prev.hi
+          push_neg at h_prev_hi_lt
+          sorry
+      -- Now use it to show extended.val.lo = start
+      simp only [extended, mkNR]
+      exact h_prev_lo_eq
 
     -- Prove ∀ nr ∈ after, start ≤ nr.val.lo
     have h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo := by
