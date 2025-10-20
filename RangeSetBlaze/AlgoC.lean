@@ -196,22 +196,26 @@ open IntRange
 private def mkNR' (lo hi : Int) (h : lo ≤ hi) : NR :=
   ⟨{ lo := lo, hi := hi }, h⟩
 
-/-- Local list-based view of the union of ranges. -/
-private def listSet (rs : List NR) : Set Int :=
+-- Local helper: list-based set view (same as listToSet from Basic.lean but scoped to this file)
+section LocalDefs
+
+private def algoCListSet (rs : List NR) : Set Int :=
   rs.foldr (fun r acc => r.val.toSet ∪ acc) (∅ : Set Int)
 
-@[simp] private lemma listSet_nil :
-    listSet ([] : List NR) = (∅ : Set Int) := rfl
+@[simp] private lemma algoCListSet_nil :
+    algoCListSet ([] : List NR) = (∅ : Set Int) := rfl
 
-@[simp] private lemma listSet_cons (r : NR) (rs : List NR) :
-    listSet (r :: rs) = r.val.toSet ∪ listSet rs := rfl
+@[simp] private lemma algoCListSet_cons (r : NR) (rs : List NR) :
+    algoCListSet (r :: rs) = r.val.toSet ∪ algoCListSet rs := rfl
 
-@[simp] private lemma listSet_append (xs ys : List NR) :
-    listSet (xs ++ ys) = listSet xs ∪ listSet ys := by
+@[simp] private lemma algoCListSet_append (xs ys : List NR) :
+    algoCListSet (xs ++ ys) = algoCListSet xs ∪ algoCListSet ys := by
   induction xs with
   | nil => simp
   | cons x xs ih =>
       simp [ih, Set.union_left_comm, Set.union_comm]
+
+end LocalDefs
 
 @[reducible] private def loLE (a b : NR) : Prop :=
   a.val.lo ≤ b.val.lo
@@ -221,8 +225,8 @@ private lemma loLE_iff (a b : NR) : loLE a b ↔ a.val.lo ≤ b.val.lo := Iff.rf
 /-- The `deleteExtraNRs_loop` preserves set unions when given a chain. -/
 private lemma deleteExtraNRs_loop_preserves_sets (current : NR) (pending : List NR)
     (hchain : List.IsChain loLE (current :: pending)) :
-    listSet ((deleteExtraNRs_loop current pending).fst :: (deleteExtraNRs_loop current pending).snd)
-    = current.val.toSet ∪ listSet pending := by
+    algoCListSet ((deleteExtraNRs_loop current pending).fst :: (deleteExtraNRs_loop current pending).snd)
+    = current.val.toSet ∪ algoCListSet pending := by
   induction pending generalizing current with
   | nil =>
       -- Base case: pending = []
@@ -486,18 +490,18 @@ private lemma pairwise_append {α : Type _} (R : α → α → Prop)
             | inr hmem => exact hcross x (by simp) y hmem
           · exact ih hxs' (fun x' hx' y hy => hcross x' (by simp [hx']) y hy)
 
-private lemma nr_mem_ranges_subset_listSet : ∀ (ranges : List NR) (nr : NR),
-    nr ∈ ranges → nr.val.toSet ⊆ listSet ranges
+private lemma nr_mem_ranges_subset_algoCListSet : ∀ (ranges : List NR) (nr : NR),
+    nr ∈ ranges → nr.val.toSet ⊆ algoCListSet ranges
   | [], _, h => by cases h
   | x :: xs, nr, h => by
       simp [List.mem_cons] at h
-      rw [listSet_cons]
+      rw [algoCListSet_cons]
       cases h with
       | inl heq =>
           subst heq
           exact Set.subset_union_left
       | inr htail =>
-          exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_listSet xs nr htail) _
+          exact Set.subset_union_of_subset_right (nr_mem_ranges_subset_algoCListSet xs nr htail) _
 
 private lemma chain_head_le_all_tail
     (y : NR) (ys : List NR)
@@ -603,11 +607,11 @@ lemma deleteExtraNRs_loop_sets
     ∀ (pending : List NR) (current : NR),
       current.val.lo = start →
       (∀ nr ∈ pending, start ≤ nr.val.lo) →
-      listSet
+      algoCListSet
           (let res := deleteExtraNRs_loop current pending;
             res.fst :: res.snd)
         =
-          current.val.toSet ∪ listSet pending := by
+          current.val.toSet ∪ algoCListSet pending := by
   intro pending current hcurlo hpend
   induction pending generalizing current with
   | nil =>
@@ -644,21 +648,21 @@ lemma deleteExtraNRs_loop_sets
           simpa [hmerged_def] using
             (deleteExtraNRs_loop_cons_merge current next tail hmerge)
         have hloop_simplified :
-            listSet
+            algoCListSet
                 ((deleteExtraNRs_loop current (next :: tail)).fst ::
                   (deleteExtraNRs_loop current (next :: tail)).snd)
               =
-                merged.val.toSet ∪ listSet tail := by
+                merged.val.toSet ∪ algoCListSet tail := by
           simpa [hstep] using hrec
         calc
-          listSet
+          algoCListSet
               (let res := deleteExtraNRs_loop current (next :: tail);
                 res.fst :: res.snd)
               =
-                merged.val.toSet ∪ listSet tail := hloop_simplified
-          _ = (current.val.toSet ∪ next.val.toSet) ∪ listSet tail := by
+                merged.val.toSet ∪ algoCListSet tail := hloop_simplified
+          _ = (current.val.toSet ∪ next.val.toSet) ∪ algoCListSet tail := by
                 simp [hmerged_toSet]
-          _ = current.val.toSet ∪ listSet (next :: tail) := by
+          _ = current.val.toSet ∪ algoCListSet (next :: tail) := by
                 simp [listSet_cons, Set.union_left_comm, Set.union_assoc,
                   Set.union_comm]
       · -- no-merge branch
@@ -1867,8 +1871,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     let before := split.fst
     let after := split.snd
     let inserted := mkNR start stop h
-  listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
-      listSet before ∪ inserted.val.toSet ∪ listSet after := by
+  algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+      algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := by
   classical
   -- Bind names so their definitional equalities are available.
   set split := List.span (fun nr => decide (nr.val.lo < start)) xs with hsplit
@@ -1942,8 +1946,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
     exact h_suffix nr hmem_split
 
   -- Unfold deleteExtraNRs and show it reduces to the cons case
-  show listSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
-       listSet before ∪ inserted.val.toSet ∪ listSet after
+  show algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop) =
+       algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after
 
   unfold deleteExtraNRs
   -- The span on (before ++ inserted :: after) with predicate p gives (before, inserted :: after)
@@ -1967,8 +1971,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   set res := deleteExtraNRs_loop initial after
 
   -- The result is: before ++ res.fst :: res.snd
-  have h_result : listSet (before ++ res.fst :: res.snd) =
-                  listSet before ∪ listSet (res.fst :: res.snd) := listSet_append _ _
+  have h_result : algoCListSet (before ++ res.fst :: res.snd) =
+                  algoCListSet before ∪ algoCListSet (res.fst :: res.snd) := listSet_append _ _
   rw [h_result]
 
   -- Apply the loop lemma
@@ -1977,8 +1981,8 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
   have h_loop := deleteExtraNRs_loop_sets start after initial h_initial_lo h_ge_after_all
   rw [h_loop]
 
-  -- Now we have: listSet before ∪ (initial.toSet ∪ listSet after)
-  -- Need to show this equals: listSet before ∪ inserted.toSet ∪ listSet after
+  -- Now we have: algoCListSet before ∪ (initial.toSet ∪ algoCListSet after)
+  -- Need to show this equals: algoCListSet before ∪ inserted.toSet ∪ algoCListSet after
   -- Note: initial has lo = inserted.lo = start, hi = max inserted.hi stop = max stop stop = stop
   have h_initial_eq : initial.val.toSet = inserted.val.toSet := by
     have h_ins_hi : inserted.val.hi = stop := by simp [inserted, mkNR]
@@ -1999,8 +2003,8 @@ private lemma deleteExtraNRs_sets_after_splice_explicit
     (h_inserted_lo : inserted.val.lo = start)
     (h_inserted_hi : inserted.val.hi = stop)
     (hchain_before_after : List.IsChain loLE (before ++ after)) :
-    listSet (deleteExtraNRs (before ++ inserted :: after) start stop)
-      = listSet before ∪ inserted.val.toSet ∪ listSet after := by
+    algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop)
+      = algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := by
   classical
   let p : NR → Bool := fun nr => decide (nr.val.lo < start)
 
@@ -2026,8 +2030,8 @@ private lemma deleteExtraNRs_sets_after_splice_explicit
   set res := deleteExtraNRs_loop initial after
 
   -- The result is: before ++ res.fst :: res.snd
-  have h_result : listSet (before ++ res.fst :: res.snd) =
-                  listSet before ∪ listSet (res.fst :: res.snd) := listSet_append _ _
+  have h_result : algoCListSet (before ++ res.fst :: res.snd) =
+                  algoCListSet before ∪ algoCListSet (res.fst :: res.snd) := listSet_append _ _
   rw [h_result]
 
   -- Apply the loop lemma
@@ -2036,8 +2040,8 @@ private lemma deleteExtraNRs_sets_after_splice_explicit
   have h_loop := deleteExtraNRs_loop_sets start after initial h_initial_lo h_after_ge
   rw [h_loop]
 
-  -- Now we have: listSet before ∪ (initial.toSet ∪ listSet after)
-  -- Need to show this equals: listSet before ∪ inserted.toSet ∪ listSet after
+  -- Now we have: algoCListSet before ∪ (initial.toSet ∪ algoCListSet after)
+  -- Need to show this equals: algoCListSet before ∪ inserted.toSet ∪ algoCListSet after
   -- Prove initial.toSet = inserted.toSet
   have h_initial_eq : initial.val.toSet = inserted.val.toSet := by
     have h_init_hi : initialHi = max stop stop := by
@@ -2051,8 +2055,8 @@ private lemma deleteExtraNRs_sets_after_splice_explicit
 private lemma internalAdd2NRs_sets
     (xs : List NR) (start stop : Int) (h : start ≤ stop)
     (hchain : List.IsChain loLE xs) :
-  listSet (internalAdd2NRs xs start stop h)
-    = listSet xs ∪ (mkNR start stop h).val.toSet := by
+  algoCListSet (internalAdd2NRs xs start stop h)
+    = algoCListSet xs ∪ (mkNR start stop h).val.toSet := by
   -- Unfold to expose deleteExtraNRs
   unfold internalAdd2NRs
 
@@ -2074,7 +2078,7 @@ private lemma internalAdd2NRs_sets
   have h_splice := deleteExtraNRs_sets_after_splice_explicit start stop h before after inserted
     h_before_all h_after_ge h_inserted_lo h_inserted_hi h_chain_concat
 
-  -- Now prove xs = before ++ after to rewrite listSet xs
+  -- Now prove xs = before ++ after to rewrite algoCListSet xs
   have h_xs_eq : xs = before ++ after := by
     have h_span := List.span_eq_takeWhile_dropWhile (p := p) (l := xs)
     have h_fst : before = xs.takeWhile p := congrArg Prod.fst h_span
@@ -2084,16 +2088,16 @@ private lemma internalAdd2NRs_sets
 
   -- The LHS unfolds to deleteExtraNRs applied to the spliced list
   -- We need to show this equals the RHS
-  calc listSet (internalAdd2NRs xs start stop h)
-    _ = listSet (deleteExtraNRs (before ++ inserted :: after) start stop) := by rfl
-    _ = listSet before ∪ inserted.val.toSet ∪ listSet after := h_splice
-    _ = listSet before ∪ listSet after ∪ inserted.val.toSet := by ac_rfl
-    _ = listSet (before ++ after) ∪ inserted.val.toSet := by rw [← listSet_append]
-    _ = listSet xs ∪ inserted.val.toSet := by rw [← h_xs_eq]
+  calc algoCListSet (internalAdd2NRs xs start stop h)
+    _ = algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop) := by rfl
+    _ = algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := h_splice
+    _ = algoCListSet before ∪ algoCListSet after ∪ inserted.val.toSet := by ac_rfl
+    _ = algoCListSet (before ++ after) ∪ inserted.val.toSet := by rw [← algoCListSet_append]
+    _ = algoCListSet xs ∪ inserted.val.toSet := by rw [← h_xs_eq]
 
--- Bridge lemma: listSet here is the same as listToSet in Basic.lean
-private lemma listSet_eq_listToSet (rs : List NR) :
-    listSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
+-- Bridge lemma: algoCListSet here matches the foldr pattern used in Basic.lean's listToSet
+private lemma algoCListSet_eq_foldr (rs : List NR) :
+    algoCListSet rs = rs.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
 
 /-- Safe insertion: set-level correctness. -/
 theorem internalAdd2_safe_toSet
@@ -2119,9 +2123,9 @@ theorem internalAdd2_safe_toSet
     unfold fromNRs RangeSetBlaze.toSet
     simp only []
     -- Now both sides are foldr, use the list lemma
-    have h1 : listSet (internalAdd2NRs s.ranges r.lo r.hi hle) =
+    have h1 : algoCListSet (internalAdd2NRs s.ranges r.lo r.hi hle) =
               (internalAdd2NRs s.ranges r.lo r.hi hle).foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
-    have h2 : listSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
+    have h2 : algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ := rfl
     rw [← h1, ← h2, hsets]
     simp [mkNR]
 
@@ -2155,7 +2159,7 @@ theorem internalAddC_extendPrev_safe_toSet
   -- The proof strategy:
   -- 1. Show extended.toSet = prev.toSet ∪ r.toSet using hNoGap and hExtend
   -- 2. Use deleteExtraNRs_loop_sets to show loop result preserves sets
-  -- 3. Show s.toSet = listSet init ∪ prev.toSet ∪ listSet after
+  -- 3. Show s.toSet = algoCListSet init ∪ prev.toSet ∪ algoCListSet after
   -- 4. Combine via associativity/commutativity
   sorry
 
@@ -2192,15 +2196,15 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
     -- Apply the splice lemma
     have h_splice := deleteExtraNRs_sets_after_splice_of_chain s.ranges r.lo r.hi hle hchain_loLE
 
-    -- Convert fromNRsUnsafe result to listSet
+    -- Convert fromNRsUnsafe result to algoCListSet
     have h_result_toSet : (fromNRsUnsafe (deleteExtraNRs (before ++ inserted :: after) r.lo r.hi)).toSet =
-                          listSet (deleteExtraNRs (before ++ inserted :: after) r.lo r.hi) := by
+                          algoCListSet (deleteExtraNRs (before ++ inserted :: after) r.lo r.hi) := by
       unfold fromNRsUnsafe
       rw [RangeSetBlaze.toSet_eq_listToSet]
       rfl
 
-    -- Now we have result.toSet = listSet (deleteExtraNRs ...) and h_splice says what that equals
-    -- Goal after rewriting should be to show listSet before ∪ inserted.toSet ∪ listSet after = s.toSet ∪ r.toSet
+    -- Now we have result.toSet = algoCListSet (deleteExtraNRs ...) and h_splice says what that equals
+    -- Goal after rewriting should be to show algoCListSet before ∪ inserted.toSet ∪ algoCListSet after = s.toSet ∪ r.toSet
     rw [h_result_toSet, h_splice]
 
     have h_inserted_eq : inserted.val.toSet = r.toSet := by
@@ -2229,9 +2233,9 @@ lemma internalAdd2_toSet (s : RangeSetBlaze) (r : IntRange) :
 
     rw [h_inserted_eq, RangeSetBlaze.toSet_eq_listToSet, h_ranges_eq]
     simp only [h_span_reconstruct]
-    -- listSet and listToSet from Basic are definitionally equal - both foldr with ∪
-    -- listSet (before ++ after) = listSet before ∪ listSet after
-    show listSet before ∪ r.toSet ∪ listSet after = listSet (before ++ after) ∪ r.toSet
+    -- algoCListSet and algoCListSet from Basic are definitionally equal - both foldr with ∪
+    -- algoCListSet (before ++ after) = algoCListSet before ∪ algoCListSet after
+    show algoCListSet before ∪ r.toSet ∪ algoCListSet after = algoCListSet (before ++ after) ∪ r.toSet
     rw [listSet_append]
     ac_rfl/-– Spec for the “extend previous” branch of `internalAddC`.
 -/
@@ -2389,8 +2393,8 @@ lemma internalAddC_extendPrev_toSet
     -- where extendedList = dropLast before ++ [extended] ++ after
     -- and target = {lo := prev.lo, hi := r.hi}
 
-    -- Step 1: Show that s.toSet = listSet before ∪ listSet after
-    have h_s_decomp : s.toSet = listSet before ∪ listSet after := by
+    -- Step 1: Show that s.toSet = algoCListSet before ∪ algoCListSet after
+    have h_s_decomp : s.toSet = algoCListSet before ∪ algoCListSet after := by
       have h_ranges_eq : s.ranges = before ++ after := by
         calc s.ranges
           _ = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
@@ -2401,16 +2405,16 @@ lemma internalAddC_extendPrev_toSet
             rw [List.span_eq_takeWhile_dropWhile]
           _ = before ++ after := rfl
       simp only [RangeSetBlaze.toSet_eq_listToSet, h_ranges_eq]
-      -- listToSet and listSet are the same definition
-      show listSet (before ++ after) = listSet before ∪ listSet after
+      -- algoCListSet and algoCListSet are the same definition
+      show algoCListSet (before ++ after) = algoCListSet before ∪ algoCListSet after
       exact listSet_append _ _
 
-    -- Step 2: Show that listSet before = listSet init ∪ prev.toSet
-    have h_before_decomp_set : listSet before = listSet init ∪ prev.val.toSet := by
+    -- Step 2: Show that algoCListSet before = algoCListSet init ∪ prev.toSet
+    have h_before_decomp_set : algoCListSet before = algoCListSet init ∪ prev.val.toSet := by
       rw [h_before_decomp, listSet_append, listSet_cons, listSet_nil, Set.union_empty]
 
-    -- Step 3: Therefore s.toSet = listSet init ∪ prev.toSet ∪ listSet after
-    have h_s_expanded : s.toSet = listSet init ∪ prev.val.toSet ∪ listSet after := by
+    -- Step 3: Therefore s.toSet = algoCListSet init ∪ prev.toSet ∪ algoCListSet after
+    have h_s_expanded : s.toSet = algoCListSet init ∪ prev.val.toSet ∪ algoCListSet after := by
       rw [h_s_decomp, h_before_decomp_set, Set.union_assoc]
 
     -- Now compute what the extend branch actually produces
@@ -2457,14 +2461,14 @@ lemma internalAddC_extendPrev_toSet
     have h_result_eq :
         (delete_extra (fromNRsUnsafe (before.dropLast ++ (extended :: after)))
           { lo := prev.val.lo, hi := r.hi }).toSet =
-        listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) := by
+        algoCListSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) := by
       unfold delete_extra fromNRsUnsafe
       rw [RangeSetBlaze.toSet_eq_listToSet, h_extendedList]
       rfl
 
     -- Step 9: Apply deleteExtraNRs lemma
-    have h_delete_eq : listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) =
-                       listSet init ∪ extended.val.toSet ∪ listSet after := by
+    have h_delete_eq : algoCListSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) =
+                       algoCListSet init ∪ extended.val.toSet ∪ algoCListSet after := by
       -- We need to show that init ++ (extended :: after) satisfies the chain property
       -- First, establish that s.ranges has the chain property
       have hchain_s : List.IsChain loLE s.ranges :=
@@ -2686,8 +2690,8 @@ lemma internalAddC_extendPrev_toSet
         simp [h_takeWhile, h_dropWhile]
 
       -- Now prove the result directly
-      -- We need: listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi)
-      --        = listSet init ∪ extended.val.toSet ∪ listSet after
+      -- We need: algoCListSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi)
+      --        = algoCListSet init ∪ extended.val.toSet ∪ algoCListSet after
 
       -- deleteExtraNRs first does a span with predicate (< prev.lo)
       -- We've proven this gives (init, extended :: after)
@@ -2703,7 +2707,7 @@ lemma internalAddC_extendPrev_toSet
       have h_deleteExtra_structure :
           ∃ processed,
             deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi = init ++ processed ∧
-            listSet processed = extended.val.toSet ∪ listSet after := by
+            algoCListSet processed = extended.val.toSet ∪ algoCListSet after := by
         -- Unfold deleteExtraNRs
         unfold deleteExtraNRs
         -- The span produces (init, extended :: after)
@@ -2741,13 +2745,13 @@ lemma internalAddC_extendPrev_toSet
       exact congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
 
     -- Rewrite the goal using the established equalities
-    show listSet ((fromNRsUnsafe ((List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).dropLast ++ extended :: after)).delete_extra { lo := prev.val.lo, hi := r.hi }).ranges = listSet s.ranges ∪ r.toSet
+    show algoCListSet ((fromNRsUnsafe ((List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).dropLast ++ extended :: after)).delete_extra { lo := prev.val.lo, hi := r.hi }).ranges = algoCListSet s.ranges ∪ r.toSet
     rw [← h_before_unfold]
-    -- Now goal is: listSet (...(before.dropLast ++ ...)...).ranges = listSet s.ranges ∪ r.toSet
-    -- Convert listSet .ranges to .toSet
+    -- Now goal is: algoCListSet (...(before.dropLast ++ ...)...).ranges = algoCListSet s.ranges ∪ r.toSet
+    -- Convert algoCListSet .ranges to .toSet
     change ((fromNRsUnsafe (before.dropLast ++ extended :: after)).delete_extra { lo := prev.val.lo, hi := r.hi }).toSet = s.toSet ∪ r.toSet
     rw [h_result_eq, h_delete_eq, h_extended_set]
-    rw [Set.union_assoc, Set.union_assoc, Set.union_comm r.toSet (listSet after),
+    rw [Set.union_assoc, Set.union_assoc, Set.union_comm r.toSet (algoCListSet after),
         ← Set.union_assoc, ← Set.union_assoc, ← h_s_expanded]
 -/
 
@@ -2782,7 +2786,78 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           -- Need to show s.toSet ∪ r.toSet = s.toSet, i.e., r.toSet ⊆ s.toSet
           rename_i prev h_last h_no_gap h_covered
           have h_r_covered : r.toSet ⊆ s.toSet := by
-            sorry -- TODO: Prove r is covered by prev, thus r.toSet ⊆ s.toSet
+            -- prev is from getLast? of span (≤ r.lo), so prev.lo ≤ r.lo
+            have h_prev_lo_le : prev.val.lo ≤ r.lo := by
+              let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
+              have h_tw_nonempty : tw ≠ [] := by
+                intro h_empty
+                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
+                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+                rw [h_span_eq, h_empty] at h_last
+                simp at h_last
+              have h_prev_mem : prev ∈ tw := by
+                have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
+                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
+                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+                -- heq says: ((List.span ...).fst).getLast hne' = prev
+                -- We need: prev ∈ tw
+                -- Use heq to show tw contains the result of getLast
+                have h_tw_eq : tw = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := h_span_eq.symm
+                rw [h_tw_eq]
+                rw [← heq]
+                exact List.getLast_mem hne'
+              have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+              exact of_decide_eq_true h_pred
+            -- r.hi ≤ prev.hi from h_covered
+            have h_r_hi_le : r.hi ≤ prev.val.hi := h_covered
+            -- Show r.toSet ⊆ prev.toSet ⊆ s.toSet
+            have h_r_subset_prev : r.toSet ⊆ prev.val.toSet := by
+              intro x hx
+              simp [IntRange.toSet] at hx ⊢
+              exact ⟨le_trans h_prev_lo_le hx.1, le_trans hx.2 h_r_hi_le⟩
+            have h_prev_in_s : prev.val.toSet ⊆ s.toSet := by
+              let tw := s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo))
+              have h_tw_nonempty : tw ≠ [] := by
+                intro h_empty
+                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
+                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+                rw [h_span_eq, h_empty] at h_last
+                simp at h_last
+              have h_prev_mem : prev ∈ tw := by
+                have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_last
+                have h_span_eq : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst = tw :=
+                  congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+                have h_tw_eq : tw = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).fst := h_span_eq.symm
+                rw [h_tw_eq]
+                rw [← heq]
+                exact List.getLast_mem hne'
+              have h_prev_mem_ranges : prev ∈ s.ranges := by
+                -- tw = takeWhile p s.ranges, so tw ⊆ s.ranges
+                -- Show: x ∈ takeWhile p xs → x ∈ xs by induction
+                have mem_takeWhile_mem : ∀ {α : Type _} (p : α → Bool) (xs : List α) (x : α),
+                    x ∈ xs.takeWhile p → x ∈ xs := by
+                  intro α p xs
+                  induction xs with
+                  | nil => intro x h; cases h
+                  | cons hd tl ih =>
+                      intro x hx
+                      by_cases hp : p hd
+                      · simp [List.takeWhile, hp] at hx
+                        cases hx with
+                        | inl heq => simp [heq]
+                        | inr htl => simp; exact Or.inr (ih x htl)
+                      · simp [List.takeWhile, hp] at hx
+                exact mem_takeWhile_mem (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+              -- s.toSet = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by definition
+              -- algoCListSet s.ranges = s.ranges.foldr (fun r acc => r.val.toSet ∪ acc) ∅ by algoCListSet_eq_foldr
+              -- So algoCListSet s.ranges = s.toSet definitionally
+              have h_algoC_eq_toSet : algoCListSet s.ranges = s.toSet := by
+                unfold RangeSetBlaze.toSet
+                rw [algoCListSet_eq_foldr]
+              have h_subset_algoC := nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_mem_ranges
+              rw [h_algoC_eq_toSet] at h_subset_algoC
+              exact h_subset_algoC
+            exact Set.Subset.trans h_r_subset_prev h_prev_in_s
           -- Goal reduces to s.toSet = s.toSet ∪ r.toSet after unfolding
           show s.toSet = s.toSet ∪ r.toSet
           rw [Set.union_eq_self_of_subset_right h_r_covered]
@@ -2962,7 +3037,7 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
                 have h_prev_mem_ranges : prev ∈ s.ranges := by
                   apply List.takeWhile_subset
                   exact h_prev_mem_tw
-                have h_listSet := nr_mem_ranges_subset_listSet s.ranges prev h_prev_mem_ranges
+                have h_listSet := nr_mem_ranges_subset_algoCListSet s.ranges prev h_prev_mem_ranges
                 rw [RangeSetBlaze.toSet_eq_listToSet]
                 convert h_listSet
 
