@@ -2269,6 +2269,28 @@ lemma internalAddC_extendPrev_toSet
               exact chain_replace_suffix_same_lo (t :: ts) prev extended after h_extended_lo hchain_tail
 
       -- Apply deleteExtraNRs_sets_after_splice_of_chain
+      -- The lemma performs a span on the input list, so we need to show that
+      -- span (fun nr => decide (nr.val.lo < prev.val.lo)) (init ++ (extended :: after))
+      -- produces (init, extended :: after)
+
+      have h_start_le_stop : prev.val.lo ≤ r.hi := by
+        have : prev.val.lo ≤ prev.val.hi := prev.property
+        omega
+
+      have h_lemma := deleteExtraNRs_sets_after_splice_of_chain
+        (init ++ (extended :: after))
+        prev.val.lo
+        r.hi
+        h_start_le_stop
+        hchain_init_ext_after
+
+      -- The lemma gives us the result after its internal span operation
+      -- We need to show that the span produces (init, extended :: after)
+      -- This requires showing all elements of init have lo < prev.lo
+      -- and extended.lo = prev.lo (so extended is in after part of span)
+
+      -- For now, accept that the span structure matches our decomposition
+      -- The full proof would show init elements have lo < prev.lo from chain property
       sorry
 
     -- Step 10: Chain the equalities
