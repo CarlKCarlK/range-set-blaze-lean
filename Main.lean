@@ -63,7 +63,7 @@ example : 4 ∈ addTouch.toSet := by
       Or.inr (by simp [ir, IntRange.mem_toSet_iff])
     simpa [Set.mem_union] using this
   have hGoal :
-      4 ∈ (internalAdd baseSet (ir 3 4)).toSet :=
+      4 ∈ (internalAddC baseSet (ir 3 4)).toSet :=
     hEq.symm ▸ hUnion
   simpa [addTouch] using hGoal
 
@@ -76,7 +76,7 @@ example : -4 ∈ addLeft.toSet := by
       Or.inr (by simp [ir, IntRange.mem_toSet_iff])
     simpa [Set.mem_union] using this
   have hGoal :
-      -4 ∈ (internalAdd baseSet (ir (-5) (-3))).toSet :=
+      -4 ∈ (internalAddC baseSet (ir (-5) (-3))).toSet :=
     hEq.symm ▸ hUnion
   simpa [addLeft] using hGoal
 
