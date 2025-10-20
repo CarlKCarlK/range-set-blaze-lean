@@ -2040,7 +2040,40 @@ lemma internalAddC_extendPrev_toSet
             have : prev.val.lo ≤ prev.val.hi := prev.property
             exact ⟨by omega, h_r.2⟩
 
-    sorry
+    -- Step 7: The extended list is init ++ [extended] ++ after
+    have h_extendedList : before.dropLast ++ (extended :: after) = init ++ (extended :: after) := by
+      rw [h_dropLast_eq]
+
+    -- Step 8: Show what delete_extra computes
+    have h_result_eq :
+        (delete_extra (fromNRsUnsafe (before.dropLast ++ (extended :: after)))
+          { lo := prev.val.lo, hi := r.hi }).toSet =
+        listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) := by
+      unfold delete_extra fromNRsUnsafe
+      rw [RangeSetBlaze.toSet_eq_listToSet, h_extendedList]
+      rfl
+
+    -- Step 9: Apply deleteExtraNRs lemma (with sorry for chain precondition)
+    have h_delete_eq : listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) =
+                       listSet init ∪ extended.val.toSet ∪ listSet after := by
+      -- This would follow from deleteExtraNRs_sets_after_splice_of_chain
+      -- but we need the right preconditions (chain property on the list)
+      sorry
+
+    -- Step 10: Chain the equalities
+    have h_before_unfold : before = (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) := by
+      unfold before split
+      exact congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+
+    -- Rewrite the goal using the established equalities
+    show listSet ((fromNRsUnsafe ((List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).dropLast ++ extended :: after)).delete_extra { lo := prev.val.lo, hi := r.hi }).ranges = listSet s.ranges ∪ r.toSet
+    rw [← h_before_unfold]
+    -- Now goal is: listSet (...(before.dropLast ++ ...)...).ranges = listSet s.ranges ∪ r.toSet
+    -- Convert listSet .ranges to .toSet
+    change ((fromNRsUnsafe (before.dropLast ++ extended :: after)).delete_extra { lo := prev.val.lo, hi := r.hi }).toSet = s.toSet ∪ r.toSet
+    rw [h_result_eq, h_delete_eq, h_extended_set]
+    rw [Set.union_assoc, Set.union_assoc, Set.union_comm r.toSet (listSet after),
+        ← Set.union_assoc, ← Set.union_assoc, ← h_s_expanded]
 
 -- Main correctness theorem for internal AddC
 theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
