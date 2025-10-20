@@ -615,7 +615,7 @@ lemma deleteExtraNRs_loop_sets
   intro pending current hcurlo hpend
   induction pending generalizing current with
   | nil =>
-      simp [deleteExtraNRs_loop, listSet_cons, listSet_nil, Set.union_comm]
+      simp [algoCListSet_nil, Set.union_comm]
   | cons next tail ih =>
       dsimp [deleteExtraNRs_loop]
       by_cases hmerge : next.val.lo ≤ current.val.hi + 1
@@ -663,15 +663,14 @@ lemma deleteExtraNRs_loop_sets
           _ = (current.val.toSet ∪ next.val.toSet) ∪ algoCListSet tail := by
                 simp [hmerged_toSet]
           _ = current.val.toSet ∪ algoCListSet (next :: tail) := by
-                simp [listSet_cons, Set.union_left_comm, Set.union_assoc,
-                  Set.union_comm]
+                simp [algoCListSet_cons]; ac_rfl
       · -- no-merge branch
         have hmerge' : ¬ next.val.lo ≤ current.val.hi + 1 := hmerge
         have hloop_eq :
             deleteExtraNRs_loop current (next :: tail)
               = (current, next :: tail) := by
           simpa using deleteExtraNRs_loop_cons_noMerge current next tail hmerge'
-        simp [hmerge, listSet_cons, Set.union_left_comm]
+        simp [hmerge, Set.union_left_comm]
 
 /-- Helper: deleteExtraNRs_loop preserves the property that result.fst.lo = start
 and all elements in result.snd have lo ≥ start. -/
@@ -1498,9 +1497,11 @@ private def internalAddC_extendPrev_safe
   let res := deleteExtraNRs_loop extended after
   -- Build the result
   let newRanges := init ++ res.fst :: res.snd
-  fromNRs newRanges (sorry : List.Pairwise NR.before newRanges)
+  -- Prove Pairwise on newRanges
+  have hpw_newRanges : List.Pairwise NR.before newRanges := by
+    sorry -- TODO: Fill in Pairwise proof using ok_deleteExtraNRs_loop_weak
 
-
+  fromNRs newRanges hpw_newRanges
 def internalAddC (s : RangeSetBlaze) (r : IntRange) : RangeSetBlaze :=
   let start := r.lo
   let stop := r.hi
@@ -1996,13 +1997,13 @@ private lemma deleteExtraNRs_sets_after_splice_of_chain
 `deleteExtraNRs` over `before ++ inserted :: after` yields the expected set union.
 This version has no let-bindings in the type signature, eliminating dependent type issues. -/
 private lemma deleteExtraNRs_sets_after_splice_explicit
-    (start stop : Int) (h : start ≤ stop)
+    (start stop : Int) (_h : start ≤ stop)
     (before after : List NR) (inserted : NR)
     (h_before_all : ∀ nr ∈ before, nr.val.lo < start)
     (h_after_ge : ∀ nr ∈ after, start ≤ nr.val.lo)
     (h_inserted_lo : inserted.val.lo = start)
     (h_inserted_hi : inserted.val.hi = stop)
-    (hchain_before_after : List.IsChain loLE (before ++ after)) :
+    (_hchain_before_after : List.IsChain loLE (before ++ after)) :
     algoCListSet (deleteExtraNRs (before ++ inserted :: after) start stop)
       = algoCListSet before ∪ inserted.val.toSet ∪ algoCListSet after := by
   classical
@@ -2867,21 +2868,23 @@ theorem internalAddC_toSet (s : RangeSetBlaze) (r : IntRange) :
           have h_extend : prev.val.hi < r.hi := not_le.mp h_not_covered
           have h_start : r.lo = r.lo := rfl
           have h_stop : r.hi = r.hi := rfl
-          -- The function call uses span, which equals (takeWhile, dropWhile)
-          -- But we need to work at the toSet level
-          have h_eq_decomp : (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges,
-                               List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) =
-                              List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges :=
-            (List.span_eq_takeWhile_dropWhile _ _).symm
-          -- Extract components
-          have h_before : List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges =
-                          (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 :=
-            congrArg Prod.fst h_eq_decomp
-          have h_after : List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges =
-                         (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).2 :=
-            congrArg Prod.snd h_eq_decomp
-          -- Apply the theorem
-          sorry -- TODO: Wire up internalAddC_extendPrev_safe_toSet properly
+          -- Build the decomposition proof: span gives (before, after)
+          have h_decomp : List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges =
+                          (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges,
+                           List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) :=
+            List.span_eq_takeWhile_dropWhile _ _
+          -- Convert h_last from span.fst to takeWhile
+          have h_last_tw : (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).getLast? = some prev := by
+            have : (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 =
+                   List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges :=
+              congrArg Prod.fst h_decomp
+            rw [← this]
+            exact h_last
+          -- Now apply the theorem with this decomposition
+          exact internalAddC_extendPrev_safe_toSet s r r.lo r.hi
+                  (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+                  (List.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges)
+                  prev h_decomp h_last_tw h_no_gap h_extend h_start h_stop
 
 -- Old proof commented out - was based on deleted functions
 /-
