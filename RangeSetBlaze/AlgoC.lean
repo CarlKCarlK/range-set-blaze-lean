@@ -2100,8 +2100,26 @@ lemma internalAddC_extendPrev_toSet
         | nil =>
           -- If init is empty, need to show: List.IsChain loLE (extended :: after)
           simp at hchain_init_prev_after
+          simp
           -- hchain_init_prev_after : List.IsChain loLE (prev :: after)
-          sorry
+          -- Need: List.IsChain loLE (extended :: after)
+          cases hafter : after with
+          | nil =>
+            -- Singleton list has trivial chain
+            constructor
+          | cons a rest =>
+            -- Need to show: loLE extended a ∧ List.IsChain loLE (a :: rest)
+            rw [hafter] at hchain_init_prev_after
+            constructor
+            · -- Show loLE extended a
+              have h_prev_a : loLE prev a := List.IsChain.rel_head hchain_init_prev_after
+              unfold loLE at h_prev_a ⊢
+              rw [h_extended_lo]
+              exact h_prev_a
+            · -- Chain on tail
+              have := List.IsChain.tail hchain_init_prev_after
+              simp at this
+              exact this
         | cons head tail =>
           -- If init is non-empty, need to show full chain
           sorry
