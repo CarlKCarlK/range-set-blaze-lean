@@ -303,9 +303,61 @@ private lemma chain_replace_suffix_same_lo (init : List NR) (old_elem new_elem :
         exact h_chain
   | cons head tail ih =>
       -- Recursive case: init = head :: tail
-      -- This is proven but requires more detailed case analysis
-      -- The key insight: head relates to first element, which doesn't change since it's in tail
-      sorry
+      -- Have: List.IsChain loLE (head :: tail ++ old_elem :: suffix)
+      -- Need: List.IsChain loLE (head :: tail ++ new_elem :: suffix)
+      simp at h_chain ⊢
+
+      -- The list (tail ++ old_elem :: suffix) is non-empty, so we can extract its head
+      have h_nonempty : tail ++ old_elem :: suffix ≠ [] := by simp
+
+      cases htail_old : tail ++ old_elem :: suffix with
+      | nil => contradiction
+      | cons first_old rest_old =>
+        -- Rewrite h_chain using htail_old
+        rw [htail_old] at h_chain
+
+        have h_head_rel : loLE head first_old := List.IsChain.rel_head h_chain
+        have h_tail_chain : List.IsChain loLE (tail ++ old_elem :: suffix) := by
+          rw [htail_old]
+          exact List.IsChain.tail h_chain
+
+        -- Apply inductive hypothesis to get: List.IsChain loLE (tail ++ new_elem :: suffix)
+        have h_tail_new : List.IsChain loLE (tail ++ new_elem :: suffix) := ih h_tail_chain
+
+        -- Now show the result
+        cases htail_new : tail ++ new_elem :: suffix with
+        | nil => simp at htail_new
+        | cons first_new rest_new =>
+          -- Need to show: List.IsChain loLE (head :: first_new :: rest_new)
+          constructor
+          · -- Show: loLE head first_new
+            -- The key: first_old and first_new are the same when tail is non-empty
+            -- When tail is empty, first_old = old_elem and first_new = new_elem with same .lo
+            cases tail with
+            | nil =>
+              -- tail is empty, so first_old = old_elem and first_new = new_elem
+              have h_old : old_elem = first_old := by
+                simp at htail_old
+                exact htail_old.1
+              have h_new : new_elem = first_new := by
+                simp at htail_new
+                exact htail_new.1
+              unfold loLE at h_head_rel ⊢
+              rw [← h_new, ← h_lo_eq, h_old]
+              exact h_head_rel
+            | cons t ts =>
+              -- tail = t :: ts, so first_old = t = first_new
+              have h_old : t = first_old := by
+                simp at htail_old
+                exact htail_old.1
+              have h_new : t = first_new := by
+                simp at htail_new
+                exact htail_new.1
+              rw [← h_new, h_old]
+              exact h_head_rel
+          · -- Show: List.IsChain loLE (first_new :: rest_new)
+            rw [← htail_new]
+            exact h_tail_new
 
 private lemma mem_takeWhile_satisfies {α : Type _} (p : α → Bool) (xs : List α) (x : α)
     (h : x ∈ xs.takeWhile p) : p x = true := by
