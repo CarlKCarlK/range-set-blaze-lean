@@ -2121,7 +2121,13 @@ lemma internalAddC_extendPrev_toSet
               simp at this
               exact this
         | cons head tail =>
-          -- If init is non-empty, need to show full chain
+          -- If init is non-empty: init ++ (extended :: after) = (head :: tail) ++ (extended :: after)
+          -- We have: List.IsChain loLE (head :: (tail ++ [prev] ++ after))
+          -- Need: List.IsChain loLE (head :: (tail ++ extended :: after))
+
+          -- Use the recursive structure: prove the chain by induction would be complex
+          -- For now, use the key fact that extended.lo = prev.lo and note this needs
+          -- a proper recursive lemma about replacing elements with same .lo
           sorry
 
       -- Apply deleteExtraNRs_sets_after_splice_of_chain
