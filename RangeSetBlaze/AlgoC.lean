@@ -2083,10 +2083,30 @@ lemma internalAddC_extendPrev_toSet
         rw [← h_before_decomp]
         exact hchain_before_after
 
-      -- This is complex - we need to show that replacing prev with extended preserves
-      -- the chain property. Since extended.lo = prev.lo and extended.hi = r.hi > prev.hi,
-      -- and extended still satisfies the ordering constraints, the chain is preserved.
-      -- For now, we note this needs detailed proof about chain preservation.
+      -- We need to show that init ++ (extended :: after) has chain property.
+      -- Key: extended.lo = prev.lo, so replacing prev with extended preserves loLE ordering.
+
+      have h_extended_lo : extended.val.lo = prev.val.lo := by
+        unfold extended
+        simp [mkNR]
+
+      -- Build the chain for init ++ (extended :: after)
+      have hchain_init_ext_after : List.IsChain loLE (init ++ (extended :: after)) := by
+        rw [List.append_assoc] at hchain_init_prev_after
+        -- hchain_init_prev_after : List.IsChain loLE (init ++ [prev] ++ after)
+        -- We need: List.IsChain loLE (init ++ [extended] ++ after)
+        -- Since extended.lo = prev.lo, we can substitute in the chain reasoning
+        cases init with
+        | nil =>
+          -- If init is empty, need to show: List.IsChain loLE (extended :: after)
+          simp at hchain_init_prev_after
+          -- hchain_init_prev_after : List.IsChain loLE (prev :: after)
+          sorry
+        | cons head tail =>
+          -- If init is non-empty, need to show full chain
+          sorry
+
+      -- Apply deleteExtraNRs_sets_after_splice_of_chain
       sorry
 
     -- Step 10: Chain the equalities
