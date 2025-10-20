@@ -2172,7 +2172,29 @@ lemma internalAddC_extendPrev_toSet
             -- Have: head :: t :: ts ++ prev :: after
             -- Need: head :: t :: ts ++ extended :: after
             -- The head relates to t (unchanged), need chain on t :: ts ++ extended :: after
-            sorry
+
+            simp
+            constructor
+            · -- Show: loLE head (first element of t :: ts ++ extended :: after)
+              -- First element is t, which is unchanged
+              have := List.IsChain.rel_head hchain_init_prev_after
+              simp at this
+              exact this
+            · -- Show: List.IsChain loLE (t :: ts ++ extended :: after)
+              -- This is the same problem as before but on a shorter list (t :: ts instead of head :: t :: ts)
+              -- We have: List.IsChain loLE (t :: ts ++ prev :: after)
+              -- Need: List.IsChain loLE (t :: ts ++ extended :: after)
+
+              have hchain_tail : List.IsChain loLE (t :: ts ++ prev :: after) := by
+                have := List.IsChain.tail hchain_init_prev_after
+                simp at this
+                exact this
+
+              -- Now apply the same reasoning recursively
+              -- For a complete proof, we'd need a separate helper lemma proved by induction
+              -- The key insight remains: extended.lo = prev.lo, so loLE is preserved
+              -- This is mathematically sound but needs formal induction proof
+              sorry
 
       -- Apply deleteExtraNRs_sets_after_splice_of_chain
       sorry
