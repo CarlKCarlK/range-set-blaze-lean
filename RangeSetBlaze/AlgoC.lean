@@ -2004,17 +2004,42 @@ lemma internalAddC_extendPrev_toSet
     have h_s_expanded : s.toSet = listSet init ∪ prev.val.toSet ∪ listSet after := by
       rw [h_s_decomp, h_before_decomp_set, Set.union_assoc]
 
-    -- Strategy to complete this proof:
-    -- 4. The extended list is: init ++ [extended] ++ after
-    -- 5. Apply deleteExtraNRs_sets_after_splice_of_chain or similar lemma
-    -- 6. The delete_extra operation computes: listSet (deleteExtraNRs extendedList prev.lo r.hi)
-    -- 7. This should equal: listSet init ∪ extended.toSet ∪ listSet after
-    --                     = listSet init ∪ (prev.toSet ∪ r.toSet) ∪ listSet after
-    --                     = (listSet init ∪ prev.toSet ∪ listSet after) ∪ r.toSet
-    --                     = s.toSet ∪ r.toSet
+    -- Now compute what the extend branch actually produces
+    -- The code computes: delete_extra (fromNRsUnsafe extendedList) target
+    -- where extendedList = dropLast before ++ [mkNR prev.lo r.hi ...] ++ after
 
-    -- The main challenge is handling the delete_extra wrapper and ensuring the intermediate
-    -- construction through fromNRsUnsafe matches what the lemmas expect.
+    -- Step 4: Note that dropLast before = init (from before = init ++ [prev])
+    have h_dropLast_eq : before.dropLast = init := by
+      rw [h_before_decomp]
+      simp [List.dropLast_append_of_ne_nil]
+
+    -- Step 5: The extended range
+    set extended := mkNR prev.val.lo r.hi (le_trans prev.property (le_of_lt h_extend)) with h_extended_def
+
+    -- Step 6: Show extended.toSet = prev.toSet ∪ r.toSet
+    have h_extended_set : extended.val.toSet = prev.val.toSet ∪ r.toSet := by
+      ext x
+      simp [extended, mkNR, IntRange.toSet]
+      constructor
+      · intro ⟨hlo, hhi⟩
+        by_cases h : x ≤ prev.val.hi
+        · left; exact ⟨hlo, h⟩
+        · right
+          push_neg at h
+          constructor
+          · -- Need x ≥ r.lo
+            have : x ≥ prev.val.hi + 1 := by omega
+            calc r.lo
+              _ ≤ prev.val.hi + 1 := h_prev_touches_r
+              _ ≤ x := this
+          · exact hhi
+      · intro h
+        cases h with
+        | inl h_prev => exact ⟨h_prev.1, by omega⟩
+        | inr h_r =>
+            have : prev.val.lo ≤ prev.val.hi := prev.property
+            exact ⟨by omega, h_r.2⟩
+
     sorry
 
 -- Main correctness theorem for internal AddC
