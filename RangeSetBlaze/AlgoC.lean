@@ -1899,7 +1899,30 @@ lemma internalAddC_extendPrev_toSet
     subst this
     -- Now handle the if statements
     simp [h_gap, h_extend]
-    -- The proof for this case is complex and remains to be completed
+
+    -- We're in the extend branch where:
+    -- - prev.val.hi + 1 ≥ r.lo (no gap, so prev touches or overlaps with r)
+    -- - prev.val.hi < r.hi (so extending makes sense)
+    -- The result is: delete_extra (fromNRsUnsafe extendedList) target
+    -- where extendedList = dropLast before ++ [mkNR prev.lo r.hi ...] ++ after
+    -- and target = {lo := prev.lo, hi := r.hi}
+
+    -- Key insight: prev is the last element of before
+    have h_prev_last : ∃ init, before = init ++ [prev] := by
+      have hne : before ≠ [] := by
+        intro h_empty
+        simp [h_empty] at h_getLast
+      use before.dropLast
+      have ⟨hne', heq⟩ := getLast?_eq_some_getLast h_getLast
+      have : hne = hne' := proof_irrel hne hne'
+      rw [← heq, ← this]
+      exact (List.dropLast_append_getLast hne).symm
+
+    -- The extended range covers prev.lo to r.hi
+    -- Since prev.hi + 1 ≥ r.lo and prev.hi < r.hi, the extended range covers:
+    -- - All of prev (prev.lo to prev.hi)
+    -- - All of r (r.lo to r.hi, since r.lo ≤ prev.hi + 1 ≤ r.hi by transitivity)
+
     sorry
 
 -- Main correctness theorem for internal AddC
