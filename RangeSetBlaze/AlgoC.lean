@@ -2053,11 +2053,40 @@ lemma internalAddC_extendPrev_toSet
       rw [RangeSetBlaze.toSet_eq_listToSet, h_extendedList]
       rfl
 
-    -- Step 9: Apply deleteExtraNRs lemma (with sorry for chain precondition)
+    -- Step 9: Apply deleteExtraNRs lemma
     have h_delete_eq : listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi) =
                        listSet init ∪ extended.val.toSet ∪ listSet after := by
-      -- This would follow from deleteExtraNRs_sets_after_splice_of_chain
-      -- but we need the right preconditions (chain property on the list)
+      -- We need to show that init ++ (extended :: after) satisfies the chain property
+      -- First, establish that s.ranges has the chain property
+      have hchain_s : List.IsChain loLE s.ranges :=
+        pairwise_before_implies_chain_loLE s.ranges s.ok
+
+      -- before ++ after = s.ranges (from span property)
+      have h_span_cat : before ++ after = s.ranges := by
+        unfold before after split
+        have h_span := List.span_eq_takeWhile_dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
+        simp only [h_span]
+        exact @List.takeWhile_append_dropWhile _ (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges
+
+      -- So before ++ after has the chain property
+      have hchain_before_after : List.IsChain loLE (before ++ after) := by
+        rw [h_span_cat]
+        exact hchain_s
+
+      -- Now we need the chain property on init ++ (extended :: after)
+      -- Since before = init ++ [prev], we have:
+      --   before ++ after = (init ++ [prev]) ++ after
+      -- has the chain property.
+
+      -- Decompose the chain: init has chain, and init relates correctly to prev
+      have hchain_init_prev_after : List.IsChain loLE ((init ++ [prev]) ++ after) := by
+        rw [← h_before_decomp]
+        exact hchain_before_after
+
+      -- This is complex - we need to show that replacing prev with extended preserves
+      -- the chain property. Since extended.lo = prev.lo and extended.hi = r.hi > prev.hi,
+      -- and extended still satisfies the ordering constraints, the chain is preserved.
+      -- For now, we note this needs detailed proof about chain preservation.
       sorry
 
     -- Step 10: Chain the equalities
