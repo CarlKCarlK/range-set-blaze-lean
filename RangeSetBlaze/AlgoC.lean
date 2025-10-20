@@ -1923,6 +1923,58 @@ lemma internalAddC_extendPrev_toSet
     -- - All of prev (prev.lo to prev.hi)
     -- - All of r (r.lo to r.hi, since r.lo ≤ prev.hi + 1 ≤ r.hi by transitivity)
 
+    obtain ⟨init, h_before_decomp⟩ := h_prev_last
+
+    -- Show key properties of the extended range
+    have h_prev_touches_r : r.lo ≤ prev.val.hi + 1 := by omega
+
+    -- prev was in takeWhile (≤ r.lo), so prev.lo ≤ r.lo
+    have h_prev_lo_le_r_lo : prev.val.lo ≤ r.lo := by
+      have h_before_eq : before = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) := by
+        unfold before split
+        exact congrArg Prod.fst (List.span_eq_takeWhile_dropWhile _ _)
+      have h_prev_mem : prev ∈ before := by
+        rw [h_before_decomp]
+        simp
+      rw [h_before_eq] at h_prev_mem
+      have h_pred := mem_takeWhile_satisfies (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges prev h_prev_mem
+      exact of_decide_eq_true h_pred
+
+    -- The extended range from prev.lo to r.hi covers both prev and r
+    have h_extended_covers : ∀ x : Int,
+        (x ∈ prev.val.toSet ∨ x ∈ r.toSet) ↔ (prev.val.lo ≤ x ∧ x ≤ r.hi) := by
+      intro x
+      simp [IntRange.toSet]
+      constructor
+      · intro h
+        cases h with
+        | inl h_prev =>
+            have : prev.val.lo ≤ x ∧ x ≤ prev.val.hi := h_prev
+            constructor
+            · exact this.1
+            · omega
+        | inr h_r =>
+            have : r.lo ≤ x ∧ x ≤ r.hi := h_r
+            constructor
+            · have : prev.val.lo ≤ prev.val.hi := prev.property
+              omega
+            · exact this.2
+      · intro ⟨h_lo, h_hi⟩
+        by_cases h_case : x ≤ prev.val.hi
+        · left
+          exact ⟨h_lo, h_case⟩
+        · right
+          push_neg at h_case
+          constructor
+          · -- Need to show x ≥ r.lo
+            -- We have: x > prev.hi and x ≥ prev.lo and r.lo ≤ prev.hi + 1
+            -- So: x ≥ prev.hi + 1 ≥ r.lo
+            have : x ≥ prev.val.hi + 1 := by omega
+            calc r.lo
+              _ ≤ prev.val.hi + 1 := h_prev_touches_r
+              _ ≤ x := this
+          · exact h_hi
+
     sorry
 
 -- Main correctness theorem for internal AddC
