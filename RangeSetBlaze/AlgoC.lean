@@ -2122,14 +2122,57 @@ lemma internalAddC_extendPrev_toSet
               exact this
         | cons head tail =>
           -- If init is non-empty: init ++ (extended :: after) = (head :: tail) ++ (extended :: after)
-          -- We have: List.IsChain loLE (head :: (tail ++ [prev] ++ after))
-          -- Need: List.IsChain loLE (head :: (tail ++ extended :: after))
+          -- We have: List.IsChain loLE (head :: tail ++ ([prev] ++ after))
+          -- Need: List.IsChain loLE (head :: tail ++ extended :: after)
 
-          -- Apply chain replacement: since extended.lo = prev.lo and loLE only compares .lo,
-          -- we can replace prev with extended preserving the chain property.
-          -- This is provable by structural induction but complex to formalize inline.
-          -- The mathematical content is: loLE is preserved under replacement of equal .lo values.
-          sorry
+          -- Simplify to work with the chain
+          simp only [List.singleton_append] at hchain_init_prev_after
+          -- hchain_init_prev_after : List.IsChain loLE (head :: tail ++ prev :: after)
+
+          -- Use chain structure: head relates to first of (tail ++ extended :: after)
+          -- and (tail ++ extended :: after) forms a chain
+          cases tail with
+          | nil =>
+            -- Simplified: head :: extended :: after vs head :: prev :: after
+            simp
+            cases hafter_match : after with
+            | nil =>
+              -- Just [head, extended] vs [head, prev]
+              constructor
+              · have := List.IsChain.rel_head hchain_init_prev_after
+                simp [hafter_match] at this
+                unfold loLE at this ⊢
+                rw [h_extended_lo]
+                exact this
+              · constructor
+            | cons a as =>
+              constructor
+              · have := List.IsChain.rel_head hchain_init_prev_after
+                simp [hafter_match] at this
+                unfold loLE at this ⊢
+                rw [h_extended_lo]
+                exact this
+              · constructor
+                · have hprev_after : List.IsChain loLE (prev :: a :: as) := by
+                    have h_tail := List.IsChain.tail hchain_init_prev_after
+                    simp at h_tail
+                    rw [hafter_match] at h_tail
+                    exact h_tail
+                  have hprev_a : loLE prev a := List.IsChain.rel_head hprev_after
+                  unfold loLE at hprev_a ⊢
+                  rw [h_extended_lo]
+                  exact hprev_a
+                · have hprev_after : List.IsChain loLE (prev :: a :: as) := by
+                    have h_tail := List.IsChain.tail hchain_init_prev_after
+                    simp at h_tail
+                    rw [hafter_match] at h_tail
+                    exact h_tail
+                  exact List.IsChain.tail hprev_after
+          | cons t ts =>
+            -- Have: head :: t :: ts ++ prev :: after
+            -- Need: head :: t :: ts ++ extended :: after
+            -- The head relates to t (unchanged), need chain on t :: ts ++ extended :: after
+            sorry
 
       -- Apply deleteExtraNRs_sets_after_splice_of_chain
       sorry
