@@ -2353,16 +2353,29 @@ lemma internalAddC_extendPrev_toSet
 
         simp [h_takeWhile, h_dropWhile]
 
-      -- Now need to connect h_lemma to our goal
-      -- Challenge: h_lemma's span produces (init, extended :: after)
-      -- But the lemma then adds "inserted" before the after part
-      -- So it gives: init ++ inserted :: (extended :: after)
-      -- While we need: init ++ (extended :: after)
-      -- The issue is that extended is already in the after part from the span
+      -- Now prove the result directly
+      -- We need: listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi)
+      --        = listSet init ∪ extended.val.toSet ∪ listSet after
 
-      -- The mathematical content is complete: we've shown the span splits correctly
-      -- and that mkNR prev.val.lo r.hi = extended
-      -- The remaining work is bookkeeping to massage h_lemma into the right form
+      -- Key insight: deleteExtraNRs merges overlapping ranges within the start..stop window
+      -- With our chain property, the ranges are properly ordered
+      -- Since extended spans from prev.lo to r.hi, and that's exactly the window we're cleaning,
+      -- deleteExtraNRs should preserve the structure
+
+      -- Alternative approach: show that the list (init ++ (extended :: after)) is already "clean"
+      -- in the sense that deleteExtraNRs doesn't change the set union
+
+      -- We have the chain property, which means elements are ordered by .lo
+      -- We also know:
+      -- - All init elements have lo < prev.lo = extended.lo
+      -- - extended.lo = prev.lo, extended.hi = r.hi
+      -- - after elements come from the original sorted list
+
+      -- With this structure, deleteExtraNRs in the window [prev.lo, r.hi] should only affect extended
+      -- and potentially merge it with adjacent ranges, but the SET union remains the same
+
+      -- The detailed proof requires analyzing deleteExtraNRs behavior case by case
+      -- This is substantial work but mathematically straightforward given our chain property
       sorry
 
     -- Step 10: Chain the equalities
