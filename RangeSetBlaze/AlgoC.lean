@@ -2357,27 +2357,60 @@ lemma internalAddC_extendPrev_toSet
       -- We need: listSet (deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi)
       --        = listSet init ∪ extended.val.toSet ∪ listSet after
 
-      -- Key insight: deleteExtraNRs merges overlapping ranges within the start..stop window
-      -- With our chain property, the ranges are properly ordered
-      -- Since extended spans from prev.lo to r.hi, and that's exactly the window we're cleaning,
-      -- deleteExtraNRs should preserve the structure
+      -- deleteExtraNRs first does a span with predicate (< prev.lo)
+      -- We've proven this gives (init, extended :: after)
 
-      -- Alternative approach: show that the list (init ++ (extended :: after)) is already "clean"
-      -- in the sense that deleteExtraNRs doesn't change the set union
+      -- By the definition of deleteExtraNRs, it splits by the span and then processes the "rest" part
+      -- The "before" part (init) is preserved as-is
+      -- So the result is: init ++ (processed version of extended :: after)
 
-      -- We have the chain property, which means elements are ordered by .lo
-      -- We also know:
-      -- - All init elements have lo < prev.lo = extended.lo
-      -- - extended.lo = prev.lo, extended.hi = r.hi
-      -- - after elements come from the original sorted list
+      -- Since extended and elements in after are properly spaced (from our chain property),
+      -- and extended covers [prev.lo, r.hi], the processing preserves the set union
 
-      -- With this structure, deleteExtraNRs in the window [prev.lo, r.hi] should only affect extended
-      -- and potentially merge it with adjacent ranges, but the SET union remains the same
+      -- Let's show this step by step:
+      have h_deleteExtra_structure :
+          ∃ processed,
+            deleteExtraNRs (init ++ (extended :: after)) prev.val.lo r.hi = init ++ processed ∧
+            listSet processed = extended.val.toSet ∪ listSet after := by
+        -- Unfold deleteExtraNRs
+        unfold deleteExtraNRs
+        -- The span produces (init, extended :: after)
+        simp only [h_span_eq]
+        -- Now it processes extended :: after
+        -- Creates initial := mkNR extended.lo (max extended.hi r.hi) ...
+        -- Since extended.hi = r.hi, we have initial = extended
+        have h_initial_eq : mkNR extended.val.lo (max extended.val.hi r.hi) (by
+          have : extended.val.lo ≤ extended.val.hi := extended.property
+          have : extended.val.hi ≤ max extended.val.hi r.hi := le_max_left _ _
+          exact le_trans ‹extended.val.lo ≤ extended.val.hi› this) = extended := by
+          ext; simp [extended, mkNR]
 
-      -- The detailed proof requires analyzing deleteExtraNRs behavior case by case
-      -- This is substantial work but mathematically straightforward given our chain property
-      sorry
+        -- Then it runs deleteExtraNRs_loop initial after
+        -- We need to show this preserves the set
+        use (deleteExtraNRs_loop extended after).fst :: (deleteExtraNRs_loop extended after).snd
+        constructor
+        · simp [h_initial_eq]
+        · -- Show the loop preserves the set
+          -- deleteExtraNRs_loop merges adjacent/overlapping ranges
+          -- With our chain property, this preserves the set union
+          -- The loop produces (final, remaining) where final is the merged result
+          -- and remaining is what couldn't be merged
+          -- The set of (final :: remaining) equals the set of the input
 
+          -- We need: listSet ((deleteExtraNRs_loop extended after).fst :: (deleteExtraNRs_loop extended after).snd)
+          --        = extended.val.toSet ∪ listSet after
+
+          -- This follows from properties of deleteExtraNRs_loop:
+          -- - It preserves set unions when merging
+          -- - With chain property, merges are well-defined
+          -- - The result (fst :: snd) has the same set as (extended :: after)
+
+          -- This is the final technical piece requiring detailed case analysis on the loop
+          sorry
+
+      obtain ⟨processed, h_result_structure, h_processed_set⟩ := h_deleteExtra_structure
+      rw [h_result_structure, listSet_append, h_processed_set]
+      ac_rfl
     -- Step 10: Chain the equalities
     have h_before_unfold : before = (List.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges) := by
       unfold before split
