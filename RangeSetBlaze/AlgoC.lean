@@ -1980,10 +1980,31 @@ lemma internalAddC_extendPrev_toSet
     -- where extendedList = dropLast before ++ [extended] ++ after
     -- and target = {lo := prev.lo, hi := r.hi}
 
+    -- Step 1: Show that s.toSet = listSet before ∪ listSet after
+    have h_s_decomp : s.toSet = listSet before ∪ listSet after := by
+      have h_ranges_eq : s.ranges = before ++ after := by
+        calc s.ranges
+          _ = s.ranges.takeWhile (fun nr => decide (nr.val.lo ≤ r.lo)) ++
+              s.ranges.dropWhile (fun nr => decide (nr.val.lo ≤ r.lo)) :=
+            List.takeWhile_append_dropWhile.symm
+          _ = (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).1 ++
+              (List.span (fun nr => decide (nr.val.lo ≤ r.lo)) s.ranges).2 := by
+            rw [List.span_eq_takeWhile_dropWhile]
+          _ = before ++ after := rfl
+      simp only [RangeSetBlaze.toSet_eq_listToSet, h_ranges_eq]
+      -- listToSet and listSet are the same definition
+      show listSet (before ++ after) = listSet before ∪ listSet after
+      exact listSet_append _ _
+
+    -- Step 2: Show that listSet before = listSet init ∪ prev.toSet
+    have h_before_decomp_set : listSet before = listSet init ∪ prev.val.toSet := by
+      rw [h_before_decomp, listSet_append, listSet_cons, listSet_nil, Set.union_empty]
+
+    -- Step 3: Therefore s.toSet = listSet init ∪ prev.toSet ∪ listSet after
+    have h_s_expanded : s.toSet = listSet init ∪ prev.val.toSet ∪ listSet after := by
+      rw [h_s_decomp, h_before_decomp_set, Set.union_assoc]
+
     -- Strategy to complete this proof:
-    -- 1. Show that s.toSet = listSet before ∪ listSet after (using span decomposition)
-    -- 2. Show that listSet before = listSet init ∪ prev.toSet (using before = init ++ [prev])
-    -- 3. The extended range {prev.lo..r.hi} equals prev.toSet ∪ r.toSet (proven above in h_extended_covers)
     -- 4. The extended list is: init ++ [extended] ++ after
     -- 5. Apply deleteExtraNRs_sets_after_splice_of_chain or similar lemma
     -- 6. The delete_extra operation computes: listSet (deleteExtraNRs extendedList prev.lo r.hi)
